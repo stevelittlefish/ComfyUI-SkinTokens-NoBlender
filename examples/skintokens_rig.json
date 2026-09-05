@@ -7,8 +7,14 @@
     {
       "id": 1,
       "type": "SkinTokensLoader",
-      "pos": [-620, 40],
-      "size": [320, 82],
+      "pos": [
+        -620,
+        40
+      ],
+      "size": [
+        320,
+        82
+      ],
       "flags": {},
       "order": 0,
       "mode": 0,
@@ -17,32 +23,76 @@
         {
           "name": "model",
           "type": "SKINTOKENS_MODEL",
-          "links": [1]
+          "links": [
+            1
+          ]
         }
       ],
       "properties": {
         "Node name for S&R": "SkinTokensLoader"
       },
-      "widgets_values": ["articulation (GRPO)"]
+      "widgets_values": [
+        "articulation (GRPO)"
+      ]
     },
     {
       "id": 2,
       "type": "Load3D",
-      "pos": [-620, 200],
-      "size": [400, 550],
+      "pos": [
+        -620,
+        200
+      ],
+      "size": [
+        400,
+        550
+      ],
       "flags": {},
       "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [
-        {"name": "image", "type": "IMAGE", "links": null},
-        {"name": "mask", "type": "MASK", "links": null},
-        {"name": "mesh_path", "type": "STRING", "links": null},
-        {"name": "normal", "type": "IMAGE", "links": null},
-        {"name": "camera_info", "type": "LOAD3D_CAMERA", "links": null},
-        {"name": "recording_video", "type": "VIDEO", "links": null},
-        {"name": "model_3d", "type": "FILE_3D", "links": [2]},
-        {"name": "model_3d_info", "type": "LOAD3D_MODEL_INFO", "links": null}
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "mesh_path",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "normal",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "camera_info",
+          "type": "LOAD3D_CAMERA",
+          "links": null
+        },
+        {
+          "name": "recording_video",
+          "type": "VIDEO",
+          "links": null
+        },
+        {
+          "name": "model_3d",
+          "type": "FILE_3D",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "model_3d_info",
+          "type": "LOAD3D_MODEL_INFO",
+          "links": null
+        }
       ],
       "properties": {
         "cnr_id": "comfy-core",
@@ -65,20 +115,36 @@
     {
       "id": 3,
       "type": "SkinTokensRig",
-      "pos": [-170, 200],
-      "size": [320, 260],
+      "pos": [
+        -170,
+        200
+      ],
+      "size": [
+        320,
+        260
+      ],
       "flags": {},
       "order": 2,
       "mode": 0,
       "inputs": [
-        {"name": "model", "type": "SKINTOKENS_MODEL", "link": 1},
-        {"name": "mesh", "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_STL,FILE_3D", "link": 2}
+        {
+          "name": "model",
+          "type": "SKINTOKENS_MODEL",
+          "link": 1
+        },
+        {
+          "name": "mesh",
+          "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_STL,FILE_3D",
+          "link": 2
+        }
       ],
       "outputs": [
         {
           "name": "rigged_glb",
           "type": "FILE_3D_GLB",
-          "links": [3]
+          "links": [
+            3
+          ]
         }
       ],
       "properties": {
@@ -89,6 +155,9 @@
         true,
         "Mixamo",
         true,
+        true,
+        false,
+        false,
         5,
         0.95,
         1.0,
@@ -99,22 +168,62 @@
     {
       "id": 4,
       "type": "Preview3DAdvanced",
-      "pos": [200, 200],
-      "size": [400, 550],
+      "pos": [
+        200,
+        200
+      ],
+      "size": [
+        400,
+        550
+      ],
       "flags": {},
       "order": 3,
       "mode": 0,
       "inputs": [
-        {"name": "model_3d", "type": "FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_FBX,FILE_3D_OBJ,FILE_3D_STL,FILE_3D_USDZ,FILE_3D", "link": 3},
-        {"name": "model_3d_info", "shape": 7, "type": "LOAD3D_MODEL_INFO", "link": null},
-        {"name": "camera_info", "shape": 7, "type": "LOAD3D_CAMERA", "link": null}
+        {
+          "name": "model_3d",
+          "type": "FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_FBX,FILE_3D_OBJ,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+          "link": 3
+        },
+        {
+          "name": "model_3d_info",
+          "shape": 7,
+          "type": "LOAD3D_MODEL_INFO",
+          "link": null
+        },
+        {
+          "name": "camera_info",
+          "shape": 7,
+          "type": "LOAD3D_CAMERA",
+          "link": null
+        }
       ],
       "outputs": [
-        {"name": "model_3d", "type": "FILE_3D", "links": null},
-        {"name": "model_3d_info", "type": "LOAD3D_MODEL_INFO", "links": null},
-        {"name": "camera_info", "type": "LOAD3D_CAMERA", "links": null},
-        {"name": "width", "type": "INT", "links": null},
-        {"name": "height", "type": "INT", "links": null}
+        {
+          "name": "model_3d",
+          "type": "FILE_3D",
+          "links": null
+        },
+        {
+          "name": "model_3d_info",
+          "type": "LOAD3D_MODEL_INFO",
+          "links": null
+        },
+        {
+          "name": "camera_info",
+          "type": "LOAD3D_CAMERA",
+          "links": null
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": null
+        }
       ],
       "properties": {
         "cnr_id": "comfy-core",
@@ -125,13 +234,38 @@
           "showSkeleton": true
         }
       },
-      "widgets_values": ["", 1024, 1024]
+      "widgets_values": [
+        "",
+        1024,
+        1024
+      ]
     }
   ],
   "links": [
-    [1, 1, 0, 3, 0, "SKINTOKENS_MODEL"],
-    [2, 2, 6, 3, 1, "FILE_3D"],
-    [3, 3, 0, 4, 0, "FILE_3D_GLB"]
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "SKINTOKENS_MODEL"
+    ],
+    [
+      2,
+      2,
+      6,
+      3,
+      1,
+      "FILE_3D"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "FILE_3D_GLB"
+    ]
   ],
   "groups": [],
   "config": {},

@@ -155,9 +155,21 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       rig-specific preview (bone picking, weight paint) is ever wanted.
 
 ## Phase 7 — End-to-end + packaging
-- [ ] **Gate E** (end-to-end through Kimodo on ai.lemon.com — the real acceptance test).
-- [ ] `examples/`: sample workflow .json + regression fixtures wired into pytest (Gates C/D).
-- [ ] README (install, usage, Manager registry metadata). Publish path via Manager.
+- [~] **Gate E** (end-to-end through Kimodo on ai.lemon.com — the real acceptance test).
+      DEFERRED: server/animation acceptance, can't run on the GPU-less laptop. Everything it
+      needs is in place and green on the server up to the hand-off: Gate F (full rig previews in
+      ComfyUI) and Gate C server round-trip (real glb -> rigged skinned glb, re-importable with
+      JOINTS_0/WEIGHTS_0) both pass. Remaining = load a rigged output into Kimodo and confirm it
+      animates; run when we have Kimodo/ai.lemon.com access.
+- [x] `examples/`: sample workflow `examples/skintokens_rig.json`
+      (Load3D -> SkinTokens Rig -> Preview3DAdvanced, + SkinTokens Loader), kept in sync with the
+      node contract and guarded by `tests/test_examples.py` (nodes are registered/core; Rig
+      widget values align with INPUT_TYPES, incl. the Phase-6 toggles). Gate C/D regression
+      fixtures already wired into pytest: `tests/test_glb_export.py` (Gate C posing gate) and
+      `tests/test_relabel.py` + committed `tests/fixtures/rigs/*.json` (Gate D, all 4 rigs).
+- [x] README (install via Manager/manual, node table, usage + all options, how-it-works,
+      dev/test, credits). Manager registry metadata already in `pyproject.toml`
+      (`[tool.comfy]` PublisherId/DisplayName). Publish path via ComfyUI Manager.
 
 ## Cross-cutting reminders
 - No Blender, no subprocess engine, no C++ runtime dependency.
