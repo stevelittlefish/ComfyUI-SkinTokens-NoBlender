@@ -117,11 +117,15 @@ def test_skeleton_configs_present_and_loadable():
     assert "vroid" in order.parts and "mixamo" in order.parts
 
 
-def test_rig_mesh_rejects_use_skeleton():
-    verts, faces = _box()
-    transform = Transform(sampler=SamplerMix(num_samples=64, num_vertex_samples=0))
-    with pytest.raises(NotImplementedError):
-        infer.rig_mesh(_cpu_bundle(transform), verts, faces, use_skeleton=True)
+def test_rig_mesh_has_no_use_skeleton():
+    # An in-memory MESH has no armature, so use_skeleton (skin-only) is not a
+    # rig_mesh option — it lives on the glb import path (rig_glb, Phase 6).
+    import inspect
+
+    params = inspect.signature(infer.rig_mesh).parameters
+    assert "use_skeleton" not in params
+    assert "use_postprocess" in params
+    assert "use_skeleton" in inspect.signature(infer.rig_glb).parameters
 
 
 @pytest.mark.server

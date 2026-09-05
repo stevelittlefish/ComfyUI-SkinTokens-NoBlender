@@ -119,6 +119,9 @@ class SkinTokensRig:
                 "relabel_fingers": ("BOOLEAN", {"default": True}),
             },
             "optional": {
+                "use_transfer": ("BOOLEAN", {"default": True}),
+                "use_postprocess": ("BOOLEAN", {"default": False}),
+                "use_skeleton": ("BOOLEAN", {"default": False}),
                 "top_k": ("INT", {"default": 5, "min": 1, "max": 200}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
@@ -140,6 +143,9 @@ class SkinTokensRig:
         relabel: bool = True,
         convention: str = "Mixamo",
         relabel_fingers: bool = True,
+        use_transfer: bool = True,
+        use_postprocess: bool = False,
+        use_skeleton: bool = False,
         top_k: int = 5,
         top_p: float = 0.95,
         temperature: float = 1.0,
@@ -157,15 +163,21 @@ class SkinTokensRig:
             num_beams=int(num_beams),
         )
 
-        # Accept a native MESH (rig from its arrays) or a File3D (rig from file).
+        # A native MESH has no source file, so texture transfer / existing-armature
+        # skinning (both need the original glb) only apply to a File3D input.
+        in_path = None
         if comfy_types.is_comfy_mesh(mesh):
             verts, faces, normals = comfy_types.comfy_mesh_to_arrays(mesh)
             rigged = infer.rig_mesh(
-                bundle, verts, faces, normals=normals, generate_kwargs=generate_kwargs
+                bundle, verts, faces, normals=normals,
+                generate_kwargs=generate_kwargs, use_postprocess=use_postprocess,
             )
         elif comfy_types.is_file3d(mesh):
             in_path = comfy_types.file3d_to_path(mesh)
-            rigged = infer.rig_glb(bundle, in_path, generate_kwargs=generate_kwargs)
+            rigged = infer.rig_glb(
+                bundle, in_path, generate_kwargs=generate_kwargs,
+                use_skeleton=use_skeleton, use_postprocess=use_postprocess,
+            )
         else:
             raise TypeError(
                 f"SkinTokensRig: unsupported mesh input {type(mesh)!r} "
@@ -180,7 +192,12 @@ class SkinTokensRig:
             )
 
         out_path = _unique_output_path(filename_prefix + ".glb")
-        glb_io.export_glb(rigged, out_path)
+        if use_transfer and in_path is not None:
+            from skintokens.transfer import transfer_rigging
+
+            transfer_rigging(rigged, in_path, out_path)
+        else:
+            glb_io.export_glb(rigged, out_path)
         return (comfy_types.make_file3d(out_path, "glb"),)
 
 

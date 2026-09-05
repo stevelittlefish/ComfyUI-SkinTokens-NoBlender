@@ -19,6 +19,7 @@ trimesh
 pygltflib
 
 # NOT bpy, NOT gradio/bottle/tornado (server pieces dropped),
-# NOT open3d / fast-simplification (only the optional voxel post-process needs
-# open3d; made optional in a later phase).
+# NOT open3d / fast-simplification: the optional voxel post-process (Phase 6,
+# use_postprocess) is implemented with a pure-numpy surface voxelizer + scipy
+# instead of open3d, so no extra dependency is needed.
 # flash-attn is optional: the vendored code falls back to standard attention.

@@ -75,6 +75,11 @@ def test_rig_input_contract():
     assert "MESH" in accepted and "FILE_3D_GLB" in accepted
     assert it["convention"][0] == nodes.CONVENTIONS
     assert nodes.SkinTokensRig.RETURN_TYPES == ("FILE_3D_GLB",)
+    # Phase 6 toggles are exposed (optional) with the upstream demo defaults.
+    opt = nodes.SkinTokensRig.INPUT_TYPES()["optional"]
+    assert opt["use_transfer"][0] == "BOOLEAN" and opt["use_transfer"][1]["default"] is True
+    assert opt["use_postprocess"][0] == "BOOLEAN" and opt["use_postprocess"][1]["default"] is False
+    assert opt["use_skeleton"][0] == "BOOLEAN" and opt["use_skeleton"][1]["default"] is False
 
 
 def test_relabel_input_output_contract():

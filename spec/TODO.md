@@ -126,10 +126,28 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       leak. Gate F complete.
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
-- [ ] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving
-      materials/textures/scale (ref: upstream `transfer_rigging`, glb.cpp material handling).
-- [ ] `use_postprocess` (voxel skin) toggle, opt-in only.
-- [ ] `use_skeleton` (skin-only against an existing armature): armature import in glb_io.
+- [x] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving
+      materials/textures/scale (port of upstream `transfer_rigging`, pure-Python). Umeyama/PCA
+      similarity transform (`estimate_similarity_transform`), NN skin transfer, then inject the
+      skeleton+skin into the target glTF in place (bake skinned meshes to world space under an
+      identity root; append JOINTS_0/WEIGHTS_0 + joint nodes + skin) so all materials/textures/
+      UVs survive. LOCAL tests pass (`tests/test_transfer.py`): materials/images/UVs preserved,
+      geometry preserved, bind-pose identity, normalized weights, trimesh re-import. Wired into
+      `infer.rig_glb_to_file` + `SkinTokensRig` (`use_transfer`, default True; File3D input only).
+- [x] `use_postprocess` (voxel skin) toggle, opt-in only. `postprocess.py`: `voxel_skin` copied
+      verbatim from upstream (pure numpy/scipy) + a pure-numpy surface voxelizer
+      (`_voxelize_surface`, replaces upstream's open3d `asset.voxel`) → no open3d dependency.
+      `apply_voxel_postprocess` mirrors demo.py (skin *= voxel_skin, then normalize). LOCAL tests
+      pass (`tests/test_postprocess.py`). Wired through `rig_asset`/`rig_glb`/`rig_mesh` + node
+      (`use_postprocess`, default False).
+- [~] `use_skeleton` (skin-only against an existing armature): armature IMPORT done in
+      `glb_io.import_skeleton` / `load_asset_with_skeleton` (joints/parents/joint_names from a
+      rigged glb → Asset.matrix_local); LOCAL round-trip tests pass
+      (`tests/test_skeleton_import.py`). Inference wired in `infer.rig_asset` (tokenizes the
+      imported skeleton via the vendored tokenizer and passes `skeleton_tokens` to
+      `predict_step`, mirroring demo.py) + node toggle (`use_skeleton`, default False). Full
+      skin-only *inference* validation is GPU/server-side (deferred like Gate B); the
+      transform's joint-normalization for imported skeletons still needs a real server run.
 - [x] ~~`SkinTokensPreview3D` node + `web/js/` three.js extension~~ **SKIPPED** (decided
       with user, Phase 5): core ComfyUI's `Preview3DAdvanced` already previews our
       `FILE_3D_GLB` output and has a `showSkeleton` toggle, so a custom preview node is

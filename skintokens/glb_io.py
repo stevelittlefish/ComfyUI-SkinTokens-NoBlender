@@ -329,6 +329,39 @@ def relabel_glb(
     return applied
 
 
+def import_skeleton(path: PathLike) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """Read an existing armature from a rigged glb: (joints, parents, joint_names).
+
+    ``joints`` is (J, 3) rest-pose world joint positions, ``parents`` (J,) with -1
+    for the root, ``joint_names`` the glTF joint node names (falling back to
+    ``bone_{i}``). Used by the ``use_skeleton`` skin-only path (Phase 6).
+    """
+    from pygltflib import GLTF2
+
+    g = GLTF2().load_binary(str(path))
+    joints, parents, joint_nodes = _skeleton_from_gltf(g)
+    names = [g.nodes[n].name or f"bone_{k}" for k, n in enumerate(joint_nodes)]
+    return joints.astype(np.float32), parents.astype(np.int64), names
+
+
+def load_asset_with_skeleton(path: PathLike, cls: str = "articulation") -> Asset:
+    """Load a rigged glb into an ``Asset`` carrying both mesh and armature.
+
+    Combines :func:`load_asset` (mesh fields) with :func:`import_skeleton`
+    (joints/parents/joint_names), setting ``matrix_local`` from the joints so the
+    tokenizer can encode the existing skeleton for the skin-only path.
+    """
+    asset = load_asset(path, cls=cls)
+    joints, parents, names = import_skeleton(path)
+    J = joints.shape[0]
+    matrix_local = np.tile(np.eye(4, dtype=np.float32), (J, 1, 1))
+    matrix_local[:, :3, 3] = joints
+    asset.matrix_local = matrix_local
+    asset.parents = parents
+    asset.joint_names = names
+    return asset
+
+
 def export_glb(asset: Asset, path: PathLike) -> None:
     """Export a rigged ``Asset`` to a skinned glb (one-frame rest pose).
 

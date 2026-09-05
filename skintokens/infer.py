@@ -95,19 +95,18 @@ def rig_mesh(
     normals: Optional[np.ndarray] = None,
     cls: str = "articulation",
     generate_kwargs: Optional[dict] = None,
-    use_skeleton: bool = False,
+    use_postprocess: bool = False,
 ) -> Asset:
     """Rig an in-memory mesh: mesh arrays -> rigged ``Asset``.
 
     The returned Asset has ``joints``/``parents`` (skeleton) and dense
     ``skin`` weights over the original vertices, in the model's normalized space.
-    ``use_skeleton`` (skin-only against an existing armature) is Phase 6.
+    ``use_postprocess`` applies the optional voxel-skin refinement (Phase 6).
     """
-    if use_skeleton:
-        raise NotImplementedError("use_skeleton (skin-only) is Phase 6")
-
     asset = build_asset(vertices, faces, normals=normals, cls=cls)
-    return rig_asset(bundle, asset, generate_kwargs=generate_kwargs)
+    return rig_asset(
+        bundle, asset, generate_kwargs=generate_kwargs, use_postprocess=use_postprocess
+    )
 
 
 def rig_glb(
@@ -116,19 +115,30 @@ def rig_glb(
     cls: str = "articulation",
     generate_kwargs: Optional[dict] = None,
     use_skeleton: bool = False,
+    use_postprocess: bool = False,
 ) -> Asset:
     """Rig a mesh loaded from a glb/gltf/obj file: path -> rigged ``Asset``.
 
-    Convenience wrapper: pure-Python glb import (Phase 2) + inference. Export back
-    to a skinned glb is Phase 3.
+    ``use_skeleton`` (Phase 6): skin-only against an armature already present in
+    the input glb — the existing skeleton is imported and tokenized, so the model
+    predicts skin weights for it instead of generating a new skeleton.
+    ``use_postprocess`` applies the optional voxel-skin refinement.
     """
     if use_skeleton:
-        raise NotImplementedError("use_skeleton (skin-only) is Phase 6")
+        from .glb_io import load_asset_with_skeleton
 
-    from .glb_io import load_asset
+        asset = load_asset_with_skeleton(path, cls=cls)
+    else:
+        from .glb_io import load_asset
 
-    asset = load_asset(path, cls=cls)
-    return rig_asset(bundle, asset, generate_kwargs=generate_kwargs)
+        asset = load_asset(path, cls=cls)
+    return rig_asset(
+        bundle,
+        asset,
+        generate_kwargs=generate_kwargs,
+        use_skeleton=use_skeleton,
+        use_postprocess=use_postprocess,
+    )
 
 
 def rig_glb_to_file(
@@ -137,17 +147,33 @@ def rig_glb_to_file(
     out_path,
     cls: str = "articulation",
     generate_kwargs: Optional[dict] = None,
+    use_skeleton: bool = False,
+    use_transfer: bool = False,
+    use_postprocess: bool = False,
 ) -> Asset:
     """Full pipeline: glb in -> rigged skinned glb out. Returns the rigged Asset.
 
-    Import (Phase 2) + inference (Phase 1) + skinned export (Phase 3). Texture/
-    material transfer onto the original glb is Phase 6; this writes the rigged
-    mesh with a default material.
+    Import + inference + skinned export. With ``use_transfer`` the rig is
+    transferred onto the *original* glb, preserving its materials/textures/scale
+    (Phase 6); otherwise the rigged proxy mesh is written with a default material.
+    ``use_skeleton``/``use_postprocess`` are forwarded to inference/refinement.
     """
-    from .glb_io import export_glb
+    rigged = rig_glb(
+        bundle,
+        in_path,
+        cls=cls,
+        generate_kwargs=generate_kwargs,
+        use_skeleton=use_skeleton,
+        use_postprocess=use_postprocess,
+    )
+    if use_transfer:
+        from .transfer import transfer_rigging
 
-    rigged = rig_glb(bundle, in_path, cls=cls, generate_kwargs=generate_kwargs)
-    export_glb(rigged, out_path)
+        transfer_rigging(rigged, in_path, out_path)
+    else:
+        from .glb_io import export_glb
+
+        export_glb(rigged, out_path)
     return rigged
 
 
@@ -155,13 +181,17 @@ def rig_asset(
     bundle: SkinTokensModel,
     asset: Asset,
     generate_kwargs: Optional[dict] = None,
+    use_skeleton: bool = False,
+    use_postprocess: bool = False,
 ) -> Asset:
-    """Rig an already-built unrigged ``Asset`` -> rigged ``Asset``.
+    """Rig an already-built ``Asset`` -> rigged ``Asset``.
 
-    Applies the predict transform (in place) and runs ``predict_step``. The
-    returned Asset has ``joints``/``parents`` (skeleton) and dense ``skin``
-    weights over the original vertices, in the model's normalized space.
+    Applies the predict transform (in place) and runs ``predict_step``. When
+    ``use_skeleton`` is set the asset's existing armature is tokenized and passed
+    as ``skeleton_tokens`` so the model only predicts skin (mirrors upstream
+    ``demo.py``). ``use_postprocess`` refines the skin with the voxel heuristic.
     """
+    has_skeleton = use_skeleton and asset.parents is not None
     prepare_asset(bundle, asset)
 
     gen = dict(DEFAULT_GENERATE_KWARGS)
@@ -170,6 +200,18 @@ def rig_asset(
 
     verts = torch.from_numpy(np.asarray(asset.sampled_vertices)).float().to(bundle.device)
     norms = torch.from_numpy(np.asarray(asset.sampled_normals)).float().to(bundle.device)
+
+    skeleton_tokens = None
+    if has_skeleton:
+        from .vendor.tokenizer.spec import TokenizeInput
+
+        tokens = bundle.tokenizer.tokenize(input=TokenizeInput(
+            joints=asset.joints,
+            parents=asset.parents,
+            cls=asset.cls,
+            joint_names=asset.joint_names,
+        ))
+        skeleton_tokens = [tokens]
 
     batch = {
         "vertices": verts,
@@ -180,9 +222,16 @@ def rig_asset(
     }
 
     with torch.no_grad():
-        results = bundle.model.predict_step(batch, make_asset=True)["results"]
+        results = bundle.model.predict_step(
+            batch, make_asset=True, skeleton_tokens=skeleton_tokens
+        )["results"]
 
     rigged = results[0].asset
     if rigged is None:
         raise RuntimeError("predict_step returned no asset")
+
+    if use_postprocess:
+        from .postprocess import apply_voxel_postprocess
+
+        apply_voxel_postprocess(rigged)
     return rigged
