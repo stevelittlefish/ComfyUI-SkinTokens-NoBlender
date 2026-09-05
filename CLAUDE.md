@@ -9,6 +9,22 @@ static mesh (`.glb`) → rigged `.glb` (skeleton + skin weights), with an option
 Mixamo relabel step. The whole point is doing glb I/O **without Blender / `bpy`**.
 See `spec/00-overview.md`.
 
+## Status (2026-09-05): feature-complete
+
+All build phases (0–7) are landed. Every gate that can run without the Comfy
+server is green locally; B and F are confirmed on the server. The pack rigs,
+relabels, exports skinned glbs, transfers rigs onto textured originals, and does
+the optional voxel post-process + skin-only-against-existing-skeleton path.
+
+**One thing is NOT us:** Gate E (end-to-end animation acceptance through *Kimodo*
+on ai.lemon.com) is **blocked on the Kimodo node itself**, which needs a separate
+fix before it can consume our rigged glbs — it is NOT a defect in this pack.
+Don't go debugging our export/skin path for "Kimodo doesn't animate it" until the
+Kimodo node is updated. See `spec/TODO.md` Phase 7 for the exact hand-off state.
+
+Treat the project as done: make changes only when the user asks, and keep
+`spec/TODO.md` in sync with any that land.
+
 ## The spec (read these — don't go searching)
 
 The `spec/` directory is a complete, self-contained build spec. Start with the
@@ -49,6 +65,25 @@ Run `references/pull.sh` to clone/update them.
   ComfyUI provides it). `requirements-dev.txt` adds a CPU torch build + pytest
   for GPU-less local work.
 - Run tests: `source .venv/bin/activate && python -m pytest -q`.
+
+### Multi-machine note (the venv is NOT in git)
+
+This repo is worked on from several computers. `./.venv` is gitignored, so a
+fresh clone (or a machine that never ran the install) has **no deps at all** —
+`pytest` can't even collect (`ModuleNotFoundError: torch` / `transformers`).
+Bootstrap before doing anything:
+
+```bash
+uv venv                                   # if ./.venv doesn't exist
+source .venv/bin/activate
+uv pip install -r requirements-dev.txt    # CPU torch + transformers/lightning/... + pytest
+uv pip install -e . --no-deps
+python -m pytest -q                        # expect: all pass, a few `server` skipped
+```
+
+If `uv` isn't on PATH on a given machine, `python -m pip install -r
+requirements-dev.txt` inside the activated venv works too (just slower). A green
+run is ~84 passed + ~4 `server` skipped.
 
 ## Testing strategy (no GPU / no ComfyUI here)
 

@@ -9,6 +9,11 @@ bone names. All glb import/export is pure Python (`trimesh` + `pygltflib`) — t
 upstream project needs Blender for this, and this pack removes that dependency so
 it runs on a headless GPU server.
 
+> **Status:** feature-complete. Rigging, relabeling, skinned-glb export, texture
+> transfer, the optional voxel post-process, and skin-only-against-an-existing-
+> skeleton all work and are tested. The one open item — animating a rigged output
+> in **Kimodo** — is waiting on a fix to the Kimodo node itself, not on this pack.
+
 ## Nodes
 
 | Node | Does |
@@ -93,10 +98,15 @@ relabeler, transfer) are covered by pure-Python `pytest`:
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -r requirements-dev.txt
+uv pip install -r requirements-dev.txt   # CPU torch + the runtime stack + pytest
 uv pip install -e . --no-deps
-python -m pytest -q
+python -m pytest -q                        # ~84 passed, ~4 `server` skipped
 ```
+
+The `.venv` is **not** in git, so a fresh clone (or a machine you haven't set up
+yet) starts with no dependencies — run the block above before `pytest`, or it
+can't even import `torch`/`transformers`. No `uv`? `python -m pip install -r
+requirements-dev.txt` inside the activated venv works too.
 
 Tests marked `server` need the GPU + full weights and are skipped locally; see
 `scripts/server/`. The build is spec-driven — see [`spec/`](spec/) for the design
