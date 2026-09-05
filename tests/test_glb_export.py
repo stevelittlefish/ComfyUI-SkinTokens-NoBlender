@@ -268,18 +268,17 @@ def test_posing_gate(tmp_path):
     np.testing.assert_allclose(r_before, r_after, atol=1e-4)
 
 
-def test_export_canonicalizes_backwards_rig(tmp_path):
-    """A humanoid generated facing the wrong way is yaw-corrected on export.
+def test_export_preserves_native_orientation(tmp_path):
+    """Export must NOT rotate the rig's facing (canonicalization was reverted).
 
-    SkinTokens emits a random facing per run; export must land every rig facing
-    the animation convention's forward so it never walks backwards. See
-    skintokens/orient.py and tests/test_orient.py.
+    Forcing a "canonical" facing turned characters backwards in previews and made
+    them walk backwards; the native SkinTokens orientation is the correct one.
     """
     from skintokens import orient
     from tests.test_relabel import _humanoid
 
     joints, parents, _ = _humanoid(with_fingers=False)  # builder faces +z
-    assert not np.allclose(orient.detect_forward(joints, parents), orient.CANONICAL_FORWARD)
+    fwd_in = orient.detect_forward(joints, parents)
 
     J = joints.shape[0]
     verts = joints.astype(np.float32)  # one vertex per joint, sharing the frame
@@ -290,13 +289,11 @@ def test_export_canonicalizes_backwards_rig(tmp_path):
     ml[:, :3, 3] = joints
     asset.matrix_local = ml
 
-    out = tmp_path / "canon.glb"
+    out = tmp_path / "native.glb"
     glb_io.export_glb(asset, out)
 
     ej, ep, _ = glb_io.import_skeleton(out)
-    np.testing.assert_allclose(
-        orient.detect_forward(ej, ep), orient.CANONICAL_FORWARD, atol=1e-5
-    )
+    np.testing.assert_allclose(orient.detect_forward(ej, ep), fwd_in, atol=1e-5)
 
 
 def test_export_requires_rig(tmp_path):

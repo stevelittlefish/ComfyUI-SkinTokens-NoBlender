@@ -1,23 +1,20 @@
-"""Rig orientation detection + canonicalization (pure Python / numpy).
+"""Rig orientation detection (pure Python / numpy).
 
-SkinTokens emits a generated humanoid in a **random facing** along the up-plane:
-some runs the character faces one way, some the other. This has two visible
-consequences downstream:
+Used only to decide **left vs right** anatomically. A humanoid skeleton is
+bilaterally symmetric, so which arm is "left" depends on which way the character
+faces — which SkinTokens does not fix (it can emit either facing). We recover the
+facing from geometry the model gets right: **the toes point forward**.
+``detect_forward`` reads the toe-vs-foot offset of the leg chains (thumbs are
+deliberately NOT used — a mis-oriented rig tends to drop the thumb too, so it is
+unreliable exactly when needed), and ``left_dir`` turns that into the
+character-left axis for the relabeler.
 
-* **Left/Right labels flip.** The relabeler's side test is only correct for one
-  facing (see ``relabel.py`` and the old ``LEFT_IS_POSITIVE`` caveat).
-* **The character walks backwards.** An animation clip drives the rig along the
-  convention's forward axis; if the body faces the opposite way it moonwalks.
+Only the toe cue is used; if the legs are missing/degenerate ``detect_forward``
+returns ``None`` and the relabeler falls back to its fixed side-axis constant.
 
-Both are the *same* confusion. We resolve it from geometry the model does get
-right: **the toes point forward**. ``detect_forward`` reads the toe-vs-foot
-offset of the leg chains (thumbs are deliberately NOT used — a mis-oriented rig
-tends to drop the thumb too, so it is unreliable exactly when needed). From that
-we can (a) label left/right anatomically at any facing and (b) yaw the whole rig
-to a canonical facing before export so it never walks backwards.
-
-Only the toe cue is used; if the legs are missing/degenerate we return ``None``
-and callers fall back to prior behavior rather than guessing.
+NB: we do NOT rotate geometry to a "canonical" facing. That was tried and
+reverted — forcing a facing turned the character backwards in previews and made
+it walk backwards; the native SkinTokens orientation is the correct one.
 """
 
 from __future__ import annotations
@@ -28,11 +25,6 @@ import numpy as np
 
 # Axis convention (matches relabel.py): up = head/foot axis, side = left/right.
 UP_AXIS = 1
-# Canonical facing the exported rig is rotated to, in the up-plane. Empirically
-# the animation engine (Kimodo/Mixamo) drives the character along -Z, so a rig
-# whose toes point -Z walks forward. Rigs generated facing +Z are the ones that
-# came out walking backwards.
-CANONICAL_FORWARD = np.array([0.0, 0.0, -1.0])
 
 
 def _children_root(parents) -> Tuple[Dict[int, List[int]], int]:
@@ -116,71 +108,3 @@ def left_dir(forward, up_axis: int = UP_AXIS) -> np.ndarray:
     up = np.zeros(3)
     up[up_axis] = 1.0
     return np.cross(up, np.asarray(forward, dtype=np.float64))
-
-
-def yaw_to_canonical(
-    forward, up_axis: int = UP_AXIS, target=CANONICAL_FORWARD
-) -> np.ndarray:
-    """3x3 rotation about the up axis mapping ``forward`` onto ``target``.
-
-    Both are projected to the up-plane, so this is a pure yaw (no tilt): it never
-    changes which way is up, only which way the character faces.
-    """
-    forward = np.asarray(forward, dtype=np.float64).copy()
-    target = np.asarray(target, dtype=np.float64).copy()
-    forward[up_axis] = 0.0
-    target[up_axis] = 0.0
-    fn, tn = np.linalg.norm(forward), np.linalg.norm(target)
-    if fn < 1e-9 or tn < 1e-9:
-        return np.eye(3)
-    f = forward / fn
-    t = target / tn
-    cos = float(np.clip(f @ t, -1.0, 1.0))
-    axis = np.zeros(3)
-    axis[up_axis] = 1.0
-    # Signed angle from f to t about the up axis.
-    sin = float(np.dot(axis, np.cross(f, t)))
-    angle = np.arctan2(sin, cos)
-    if abs(angle) < 1e-4:
-        return np.eye(3)  # already facing canonically (ignore float dust)
-    c, s = np.cos(angle), np.sin(angle)
-    R = np.eye(3)
-    # Rotation about the up axis (Rodrigues specialized to a principal axis).
-    other = [i for i in range(3) if i != up_axis]
-    a, b = other  # the two in-plane axes, in order
-    R[a, a] = c
-    R[b, b] = c
-    R[a, b] = s
-    R[b, a] = -s
-    return R
-
-
-def canonicalize(
-    vertices,
-    normals,
-    joints,
-    parents,
-    up_axis: int = UP_AXIS,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
-    """Yaw mesh + rig to the canonical facing. Returns (V, N, J, rotated).
-
-    ``rotated`` is False (arrays returned unchanged) when forward can't be
-    detected or the rig already faces canonically, so a rig we can't read is
-    never silently mis-rotated.
-    """
-    V = np.asarray(vertices, dtype=np.float64)
-    N = None if normals is None else np.asarray(normals, dtype=np.float64)
-    J = np.asarray(joints, dtype=np.float64)
-
-    forward = detect_forward(J, parents, up_axis=up_axis)
-    if forward is None:
-        return V, N, J, False
-
-    R = yaw_to_canonical(forward, up_axis=up_axis)
-    if np.allclose(R, np.eye(3), atol=1e-9):
-        return V, N, J, False
-
-    Vr = V @ R.T
-    Nr = None if N is None else N @ R.T
-    Jr = J @ R.T
-    return Vr, Nr, Jr, True

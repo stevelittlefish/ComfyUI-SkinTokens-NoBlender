@@ -82,17 +82,19 @@ animation clip. Both are the same confusion (a mis-oriented rig also tends to dr
 
 Fix: derive the rig's **forward** direction from geometry the model gets right — the toes
 (`orient.detect_forward`, toe-vs-foot offset; thumbs are deliberately not used, being absent
-exactly when the rig is confused). Then:
-- the relabeler picks Left/Right by projecting onto `up × forward`, so labels are anatomically
-  correct at **any** facing (`SIDE_AXIS`/`LEFT_IS_POSITIVE` remain only as a legs-missing
-  fallback); and
-- `export_glb` **canonicalizes facing** — yaws the whole rig (mesh, normals, joints, IBMs) so
-  the character faces the convention's forward (`orient.CANONICAL_FORWARD`, -z), which stops
-  the backwards-walking. Labels are index-attached, so rotation leaves them consistent.
+exactly when the rig is confused). The relabeler then picks Left/Right by projecting onto
+`up × forward`, so labels are anatomically correct at **any** facing (`SIDE_AXIS` /
+`LEFT_IS_POSITIVE` remain only as a legs-missing fallback). See `skintokens/orient.py` and
+`tests/test_orient.py`.
 
-See `skintokens/orient.py`, `tests/test_orient.py`, and the export canonicalization test.
-If a real Kimodo animation ever shows the character facing the *wrong* way, flip
-`CANONICAL_FORWARD` once (that is the only remaining convention choice).
+**Facing is NOT rewritten.** An earlier version of this fix also yawed the whole rig on export
+to a "canonical" -z facing, on the theory that a back-facing rig walks backwards. Testing on
+real rigs disproved it: the forced rotation turned the character **backwards** in every preview
+and made it walk backwards, while the native SkinTokens orientation previewed and animated
+correctly. So export preserves the native orientation; only the (geometry-neutral) left/right
+labeling uses `detect_forward`. The observed animation glitches (limb "flapping") persisted
+regardless of orientation or labels — they are a downstream Kimodo / retarget issue (Gate E),
+not something this pack controls.
 
 ## Reference implementation (pure Python / numpy — adapt, don't blindly paste)
 

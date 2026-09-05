@@ -394,17 +394,12 @@ def export_glb(asset: Asset, path: PathLike) -> None:
         mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, maintain_order=True)
         normals = np.asarray(mesh.vertex_normals, dtype=np.float32)
 
-    # Canonicalize facing: yaw the whole rig so the character faces the animation
-    # convention's forward. SkinTokens emits a random facing per run; without this
-    # a back-facing rig walks backwards (and its left/right read mirrored). Labels
-    # are attached by joint index, so rotating geometry leaves them consistent.
-    from .orient import canonicalize
-    vertices, normals, joints_xyz, rotated = canonicalize(
-        vertices, normals, joints_xyz, parents
-    )
-    vertices = vertices.astype(np.float32)
-    normals = normals.astype(np.float32)
-    joints_xyz = joints_xyz.astype(np.float32)
+    # NB: we deliberately do NOT rotate the rig to a "canonical" facing on export.
+    # A previous attempt to do so (yaw to -z) faced the character backwards in
+    # every preview and made it walk backwards; the native SkinTokens orientation
+    # is the one the previews/animation expect. Left/right is still derived
+    # anatomically in the relabeler (orient.detect_forward), which needs no
+    # geometry change. See spec/04 "Left/Right".
 
     joint_names = asset.joint_names or [f"bone_{i}" for i in range(J)]
 

@@ -172,14 +172,18 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       (`[tool.comfy]` PublisherId/DisplayName). Publish path via ComfyUI Manager.
 
 ## Post-release fixes
-- [x] **Orientation robustness** (2026-09-05): SkinTokens emits a random facing per run, which
-      mislabeled left/right and made some rigs walk backwards (same confusion; thumb often
-      dropped too). Added `skintokens/orient.py` — `detect_forward` reads the toe->foot offset;
-      the relabeler now picks L/R via `up × forward` (correct at any facing, old side-axis
-      constant kept only as a legs-missing fallback); `export_glb` canonicalizes facing (yaws
-      mesh+normals+joints+IBMs to `CANONICAL_FORWARD` = -z) so rigs never walk backwards. Tests:
-      `tests/test_orient.py` + `test_export_canonicalizes_backwards_rig`. Confirmed against the
-      user's `android_rigged{,2}.glb` (both faced +z). Spec: `04-relabeler-spec.md`.
+- [x] **Left/right labeling robustness** (2026-09-05): SkinTokens emits a random facing per run,
+      so the old fixed `+x == Left` constant mislabeled L/R on the opposite facing. Added
+      `skintokens/orient.py` — `detect_forward` reads the toe->foot offset (thumbs deliberately
+      unused: dropped exactly when the rig is confused); the relabeler now picks L/R via
+      `up × forward`, correct at any facing (old side-axis constant kept only as a legs-missing
+      fallback). Tests: `tests/test_orient.py`. Spec: `04-relabeler-spec.md`.
+- [x] **Export facing canonicalization — tried and REVERTED** (2026-09-05): also yawed the rig
+      to a canonical -z facing on export, to stop a suspected backwards-walk. Real-rig testing
+      disproved it — the rotation faced the character backwards in previews and made it walk
+      backwards; native orientation is correct. Removed the geometry rotation; kept only the
+      label-side `detect_forward`. The remaining limb "flapping" in animation is orientation- and
+      label-independent → downstream Kimodo/retarget (Gate E), not this pack.
 
 ## Cross-cutting reminders
 - No Blender, no subprocess engine, no C++ runtime dependency.
