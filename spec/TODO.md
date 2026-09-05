@@ -68,11 +68,21 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       upstream Blender export (golden fixture) and the real Kimodo animation round-trip (E).
 
 ## Phase 4 — Relabeler (pure Python)
-- [ ] `relabel.py`: topology-driven recognizer per `04`/`08` (descendant-count based;
-      position only for L/R + thumb). Multi-convention via name tables: **Mixamo + UE5**.
-- [ ] Apply names to exported joint node names (keep indices stable).
-- [ ] Fingers: optional, per `04` (thumb=min-y; 3-finger special case).
-- [ ] **Gate D** (relabel correctness on the 4 sample rigs + mirror test; both conventions).
+- [x] `relabel.py`: topology-driven recognizer per `04`/`08` (descendant-count based;
+      position only for L/R + thumb). Multi-convention via name tables: **Mixamo + UE5**
+      (`NAME_TABLES`, extensible). Pelvis = first bone with >=3 children (survives an
+      armature root above it). Pure numpy; `label_humanoid` returns `{index: name}`.
+- [x] Apply names to exported joint node names (keep indices stable). `relabel_asset`
+      writes into `asset.joint_names` in place (creating `bone_N` first if absent);
+      indices never reorder, so exported JOINTS_0 stays consistent (export reads
+      `asset.joint_names` for the glTF node names).
+- [x] Fingers: optional (`with_fingers`), per `04` (thumb=min up-axis; remaining sorted
+      by side axis; 3-finger special case -> [thumb, index, pinky]).
+- [~] **Gate D** — LOCAL half PASSES (`tests/test_relabel.py`, 10 tests): Mixamo + UE5
+      core-bone labeling on a synthetic validated-topology humanoid, mirror test (L/R by
+      position), 5-finger + 3-finger + fingers-off, asset in-place rename, unrecognized-joint
+      preservation, and the armature-root-above-pelvis case. Still TODO: run on the **4 real
+      sample rigs** (user to provide) to confirm against the empirically validated mapping.
 
 ## Phase 5 — ComfyUI nodes
 - [ ] `nodes.py`: `SkinTokensLoader`, `SkinTokensRig` (relabel + params toggles), optional
