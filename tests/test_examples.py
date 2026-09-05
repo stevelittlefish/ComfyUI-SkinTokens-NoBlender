@@ -55,5 +55,5 @@ def test_example_rig_widget_values_match_node_contract():
     # spot-check the Phase-6 toggles sit where the node declares them.
     values = dict(zip(expected, rig["widgets_values"]))
     assert values["use_transfer"] is True
-    assert values["use_postprocess"] is False
+    assert values["use_postprocess"] is True
     assert values["use_skeleton"] is False

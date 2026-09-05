@@ -78,7 +78,7 @@ def test_rig_input_contract():
     # Phase 6 toggles are exposed (optional) with the upstream demo defaults.
     opt = nodes.SkinTokensRig.INPUT_TYPES()["optional"]
     assert opt["use_transfer"][0] == "BOOLEAN" and opt["use_transfer"][1]["default"] is True
-    assert opt["use_postprocess"][0] == "BOOLEAN" and opt["use_postprocess"][1]["default"] is False
+    assert opt["use_postprocess"][0] == "BOOLEAN" and opt["use_postprocess"][1]["default"] is True
     assert opt["use_skeleton"][0] == "BOOLEAN" and opt["use_skeleton"][1]["default"] is False
 
 

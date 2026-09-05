@@ -64,8 +64,8 @@ SkinTokens Loader
   its materials, textures, UVs and scale. Only applies to a `File3D` input (a
   native `MESH` has no source file). Off = write the rigged proxy with a flat
   default material.
-- **use_postprocess** (default off) - refine the skin weights with a voxel-heat
-  heuristic. Opt-in; slower.
+- **use_postprocess** (default on) - refine the skin weights with a voxel-heat
+  heuristic. Slower, but gives cleaner deformation; turn off for a faster pass.
 - **use_skeleton** (default off) - skin-only: keep an armature already present in
   the input glb and only predict skin weights for it, instead of generating a new
   skeleton.

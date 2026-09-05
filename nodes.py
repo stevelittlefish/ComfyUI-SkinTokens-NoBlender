@@ -126,7 +126,7 @@ class SkinTokensRig:
             },
             "optional": {
                 "use_transfer": ("BOOLEAN", {"default": True}),
-                "use_postprocess": ("BOOLEAN", {"default": False}),
+                "use_postprocess": ("BOOLEAN", {"default": True}),
                 "use_skeleton": ("BOOLEAN", {"default": False}),
                 "top_k": ("INT", {"default": 5, "min": 1, "max": 200}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01}),
@@ -151,7 +151,7 @@ class SkinTokensRig:
         relabel_fingers: bool = True,
         clean_weights: bool = True,
         use_transfer: bool = True,
-        use_postprocess: bool = False,
+        use_postprocess: bool = True,
         use_skeleton: bool = False,
         top_k: int = 5,
         top_p: float = 0.95,
