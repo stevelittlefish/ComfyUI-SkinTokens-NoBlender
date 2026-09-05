@@ -117,6 +117,12 @@ class SkinTokensRig:
                 "relabel": ("BOOLEAN", {"default": True}),
                 "convention": (CONVENTIONS, {"default": "Mixamo"}),
                 "relabel_fingers": ("BOOLEAN", {"default": True}),
+                "clean_weights": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Repair geometrically-impossible skin weights (e.g. a hand "
+                               "vertex leaking onto a toe) after rigging. Fixes 'exploding "
+                               "hand' tearing during animation. Deterministic.",
+                }),
             },
             "optional": {
                 "use_transfer": ("BOOLEAN", {"default": True}),
@@ -143,6 +149,7 @@ class SkinTokensRig:
         relabel: bool = True,
         convention: str = "Mixamo",
         relabel_fingers: bool = True,
+        clean_weights: bool = True,
         use_transfer: bool = True,
         use_postprocess: bool = False,
         use_skeleton: bool = False,
@@ -198,6 +205,19 @@ class SkinTokensRig:
             transfer_rigging(rigged, in_path, out_path)
         else:
             glb_io.export_glb(rigged, out_path)
+
+        # Deterministic post-rig cleanup: strip cross-body weight contamination.
+        if clean_weights:
+            from skintokens import weight_repair
+
+            stats = weight_repair.repair_glb(out_path, out_path)
+            if stats.n_influences_removed:
+                print(
+                    f"[SkinTokens] Rig: cleaned {stats.n_vertices_repaired} vertices "
+                    f"({stats.repaired_fraction * 100:.2f}%), removed "
+                    f"{stats.n_influences_removed} stray influences.",
+                    flush=True,
+                )
         return (comfy_types.make_file3d(out_path, "glb"),)
 
 
@@ -245,14 +265,67 @@ class SkinTokensRelabel:
         return (comfy_types.make_file3d(out_path, "glb"),)
 
 
+class SkinTokensCleanWeights:
+    """Repair geometrically-impossible skin weights on a rigged glb. No model.
+
+    Removes influences that blend across the skeleton (e.g. a hand vertex weighted
+    to a toe) and renormalizes, fixing the "exploding hand" tearing without losing
+    finger articulation. Deterministic, offline; a sibling of SkinTokensRelabel.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "glb": (RIGGED_FILE3D_TYPES,),
+                "filename_prefix": ("STRING", {"default": "skintokens_cleaned"}),
+            },
+            "optional": {
+                "min_hops": ("INT", {
+                    "default": 5, "min": 2, "max": 20,
+                    "tooltip": "Flag an influence when a vertex is weighted to two bones "
+                               "at least this many skeleton-graph hops apart. 5 is above "
+                               "the widest anatomical blend (leg<->leg via hips = 4).",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("FILE_3D_GLB",)
+    RETURN_NAMES = ("cleaned_glb",)
+    FUNCTION = "clean"
+    CATEGORY = CATEGORY
+
+    def clean(self, glb, filename_prefix: str = "skintokens_cleaned", min_hops: int = 5) -> Tuple:
+        from skintokens import comfy_types, weight_repair
+
+        if not comfy_types.is_file3d(glb):
+            raise TypeError(
+                f"SkinTokensCleanWeights: expected a FILE_3D_* object, got {type(glb)!r}"
+            )
+        in_path = comfy_types.file3d_to_path(glb)
+        out_path = _unique_output_path(filename_prefix + ".glb")
+        stats = weight_repair.repair_glb(in_path, out_path, min_hops=int(min_hops))
+        print(
+            f"[SkinTokens] CleanWeights: repaired {stats.n_vertices_repaired} vertices "
+            f"({stats.repaired_fraction * 100:.2f}%), removed {stats.n_influences_removed} "
+            f"stray influences. Top contaminants: "
+            + ", ".join(f"{b}({c})" for b, c in
+                        sorted(stats.removed_by_bone.items(), key=lambda kv: -kv[1])[:5]),
+            flush=True,
+        )
+        return (comfy_types.make_file3d(out_path, "glb"),)
+
+
 NODE_CLASS_MAPPINGS = {
     "SkinTokensLoader": SkinTokensLoader,
     "SkinTokensRig": SkinTokensRig,
     "SkinTokensRelabel": SkinTokensRelabel,
+    "SkinTokensCleanWeights": SkinTokensCleanWeights,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SkinTokensLoader": "SkinTokens Loader",
     "SkinTokensRig": "SkinTokens Rig",
     "SkinTokensRelabel": "SkinTokens Relabel",
+    "SkinTokensCleanWeights": "SkinTokens Clean Weights",
 }

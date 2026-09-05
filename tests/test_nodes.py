@@ -56,7 +56,7 @@ def _rigged_glb_from_fixture(name, path):
 
 def test_node_mappings_present():
     assert set(nodes.NODE_CLASS_MAPPINGS) == {
-        "SkinTokensLoader", "SkinTokensRig", "SkinTokensRelabel"
+        "SkinTokensLoader", "SkinTokensRig", "SkinTokensRelabel", "SkinTokensCleanWeights"
     }
     for key, cls in nodes.NODE_CLASS_MAPPINGS.items():
         assert key in nodes.NODE_DISPLAY_NAME_MAPPINGS
