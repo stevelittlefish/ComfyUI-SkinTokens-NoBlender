@@ -107,6 +107,41 @@ def rig_mesh(
         raise NotImplementedError("use_skeleton (skin-only) is Phase 6")
 
     asset = build_asset(vertices, faces, normals=normals, cls=cls)
+    return rig_asset(bundle, asset, generate_kwargs=generate_kwargs)
+
+
+def rig_glb(
+    bundle: SkinTokensModel,
+    path,
+    cls: str = "articulation",
+    generate_kwargs: Optional[dict] = None,
+    use_skeleton: bool = False,
+) -> Asset:
+    """Rig a mesh loaded from a glb/gltf/obj file: path -> rigged ``Asset``.
+
+    Convenience wrapper: pure-Python glb import (Phase 2) + inference. Export back
+    to a skinned glb is Phase 3.
+    """
+    if use_skeleton:
+        raise NotImplementedError("use_skeleton (skin-only) is Phase 6")
+
+    from .glb_io import load_asset
+
+    asset = load_asset(path, cls=cls)
+    return rig_asset(bundle, asset, generate_kwargs=generate_kwargs)
+
+
+def rig_asset(
+    bundle: SkinTokensModel,
+    asset: Asset,
+    generate_kwargs: Optional[dict] = None,
+) -> Asset:
+    """Rig an already-built unrigged ``Asset`` -> rigged ``Asset``.
+
+    Applies the predict transform (in place) and runs ``predict_step``. The
+    returned Asset has ``joints``/``parents`` (skeleton) and dense ``skin``
+    weights over the original vertices, in the model's normalized space.
+    """
     prepare_asset(bundle, asset)
 
     gen = dict(DEFAULT_GENERATE_KWARGS)

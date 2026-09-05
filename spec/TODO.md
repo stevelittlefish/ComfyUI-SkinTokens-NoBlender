@@ -35,9 +35,17 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       on the same mesh (needs a shared input + upstream run on the server).
 
 ## Phase 2 — glb import (pure Python)
-- [ ] `glb_io.py` import: trimesh → verts/faces/normals/uv/mesh_names, matching the fields
-      `BpyParser.load` produced. (Armature-in / `use_skeleton` import can wait to Phase 6.)
-- [ ] **Gate A** (import parity).
+- [x] `glb_io.py` import: trimesh → verts/faces/normals/mesh_names + vertex_bias/face_bias,
+      matching the fields `BpyParser.load` produced. Multi-part scenes concatenated (faces
+      offset by running vertex count); normals recomputed by trimesh (as upstream did).
+      `load_mesh` (arrays) + `load_asset` (unrigged Asset). `infer.rig_glb` wires it to
+      inference. (Armature-in / `use_skeleton` import deferred to Phase 6. UV not extracted —
+      only needed for texture transfer, Phase 6.)
+- [~] **Gate A** (import parity). Self-consistency half DONE (`tests/test_glb_io.py`: counts,
+      multi-part bias, face-offset validity, normals, Asset fields; verified on the real
+      3-part giraffe.glb). Blender-parity (vs `BpyParser.load`) still TODO: needs a committed
+      golden fixture generated on a Blender box. AXIS: trimesh loads glTF-native Y-up vs
+      upstream's Blender Z-up — calibration deferred to Phase 3 (must match export).
 
 ## Phase 3 — glb export (THE hard part — read `03` + glb.cpp first)
 - [ ] Calibrate the Asset's native axis convention (up axis, side axis); document constants.
