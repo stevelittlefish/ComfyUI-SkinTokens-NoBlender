@@ -14,6 +14,9 @@ dependencies = { file = ["requirements.txt"] }
 [tool.setuptools.packages.find]
 include = ["skintokens*"]
 
+[tool.setuptools.package-data]
+"skintokens.vendor" = ["configs/skeleton/*.yaml"]
+
 # --- ComfyUI Manager / registry metadata ---
 [tool.comfy]
 PublisherId = ""

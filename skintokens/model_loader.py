@@ -31,6 +31,32 @@ QWEN_REPO_ID = "Qwen/Qwen3-0.6B"
 
 DeviceLike = Union[str, torch.device]
 
+# Vendored skeleton part-order configs (upstream configs/skeleton/*.yaml). The
+# checkpoint's transform config references these by a CWD-relative path
+# (./configs/skeleton/*.yaml); we rewrite those to here at load time.
+VENDOR_CONFIGS_DIR = Path(__file__).resolve().parent / "vendor" / "configs"
+
+
+def _rewrite_skeleton_paths(transform_config: dict) -> None:
+    """Point every transform's Order.skeleton_path at the vendored yaml files.
+
+    Mutates ``transform_config`` in place. Matches by filename, so the original
+    relative paths in the checkpoint no longer depend on the working directory.
+    """
+    for key in ("predict_transform", "validate_transform", "train_transform"):
+        section = transform_config.get(key)
+        if not isinstance(section, dict):
+            continue
+        order = section.get("order")
+        if not isinstance(order, dict):
+            continue
+        skeleton_path = order.get("skeleton_path")
+        if not isinstance(skeleton_path, dict):
+            continue
+        for cls_name, path in list(skeleton_path.items()):
+            resolved = VENDOR_CONFIGS_DIR / "skeleton" / Path(str(path)).name
+            skeleton_path[cls_name] = str(resolved.resolve())
+
 
 @dataclass
 class SkinTokensModel:
@@ -150,6 +176,7 @@ def load_model(
     model.eval()
 
     tokenizer = get_tokenizer(**model.tokenizer_config)
+    _rewrite_skeleton_paths(model.transform_config)
     transform = Transform.parse(**model.transform_config["predict_transform"])
 
     return SkinTokensModel(

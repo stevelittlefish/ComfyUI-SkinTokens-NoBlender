@@ -84,6 +84,34 @@ def test_prepare_asset_samples_surface():
     assert asset.sampled_normals.shape == (n, 3)
 
 
+def test_skeleton_configs_present_and_loadable():
+    # Regression: the checkpoint's transform config points Order at
+    # ./configs/skeleton/*.yaml; those must be vendored and path-rewritten so
+    # Transform.parse works regardless of CWD (caught a Gate-B FileNotFoundError).
+    from pathlib import Path
+
+    from skintokens.model_loader import _rewrite_skeleton_paths
+    from skintokens.vendor.data.order import Order
+
+    cfg = {
+        "predict_transform": {
+            "order": {
+                "skeleton_path": {
+                    "vroid": "./configs/skeleton/vroid.yaml",
+                    "mixamo": "./configs/skeleton/mixamo.yaml",
+                }
+            }
+        }
+    }
+    _rewrite_skeleton_paths(cfg)
+    skeleton_path = cfg["predict_transform"]["order"]["skeleton_path"]
+    for p in skeleton_path.values():
+        assert Path(p).is_file(), p
+
+    order = Order.parse(skeleton_path=skeleton_path)
+    assert "vroid" in order.parts and "mixamo" in order.parts
+
+
 def test_rig_mesh_rejects_use_skeleton():
     verts, faces = _box()
     transform = Transform(sampler=SamplerMix(num_samples=64, num_vertex_samples=0))

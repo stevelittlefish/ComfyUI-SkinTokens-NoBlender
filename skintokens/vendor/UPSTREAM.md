@@ -25,6 +25,11 @@ the documented import fixes below; re-vendoring should reproduce them.
    only if `flash_attn` imports, else `"sdpa"` — so the model loads on servers
    (and CPU dev boxes) without flash-attn. Same policy as the SDPA fallback in (3-ish).
 
+6. **Added** `configs/skeleton/{mixamo,vroid}.yaml` — copied verbatim from
+   upstream `configs/`. The checkpoint's transform config references these skeleton
+   part-order tables by a CWD-relative path; `model_loader._rewrite_skeleton_paths`
+   rewrites those to this vendored location at load time.
+
 ## Known lazy references to the removed `bpy.py`
 
 These are inside function bodies and do NOT run at import time. They will be
