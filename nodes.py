@@ -33,6 +33,14 @@ from skintokens.comfy_types import (
 CONVENTIONS = ["Mixamo", "UE5"]
 _CONVENTION_KEY = {"Mixamo": "mixamo", "UE5": "ue5"}
 
+# Selectable TokenRig checkpoints in the HF repo (VAST-AI/SkinTokens). Friendly
+# name -> checkpoint path. Auto-downloaded to the HF cache (HF_HOME) on first use.
+# Currently the repo ships one; kept as a dict so more can be added later.
+MODELS = {
+    "articulation (GRPO)": "experiments/articulation_xl_quantization_256_token_4/grpo_1400.ckpt",
+}
+_DEFAULT_MODEL = next(iter(MODELS))
+
 CATEGORY = "SkinTokens"
 
 
@@ -61,17 +69,18 @@ def _unique_output_path(filename: str) -> str:
 
 
 class SkinTokensLoader:
-    """Load the SkinTokens/TokenRig model, wrapped for ComfyUI VRAM management."""
+    """Load a SkinTokens/TokenRig model, wrapped for ComfyUI VRAM management.
+
+    Pick a model from the dropdown; it is downloaded to the HuggingFace cache
+    (``HF_HOME``) on first use and reused thereafter — the standard "auto-download
+    from a preselected list" loader pattern. No path to configure.
+    """
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "download": ("BOOLEAN", {"default": True}),
-            },
-            "optional": {
-                # Empty string -> shared HF cache; a path -> private copy there.
-                "models_dir": ("STRING", {"default": ""}),
+                "model": (list(MODELS.keys()), {"default": _DEFAULT_MODEL}),
             },
         }
 
@@ -80,7 +89,7 @@ class SkinTokensLoader:
     FUNCTION = "load"
     CATEGORY = CATEGORY
 
-    def load(self, download: bool = True, models_dir: str = ""):
+    def load(self, model: str = _DEFAULT_MODEL):
         import comfy.model_management as mm
 
         from skintokens.comfy_model import wrap_for_comfy
@@ -88,9 +97,9 @@ class SkinTokensLoader:
 
         offload_device = mm.unet_offload_device()
         bundle = load_model(
-            models_dir=(models_dir or None),
             device=offload_device,  # load to CPU; ComfyUI moves it to GPU on demand
-            download=download,
+            tokenrig_ckpt=MODELS[model],
+            # models_dir=None -> shared HF cache (respects HF_HOME); auto-downloads.
         )
         return (wrap_for_comfy(bundle),)
 

@@ -77,6 +77,7 @@ class SkinTokensModel:
 def resolve_weights(
     models_dir: Optional[Path] = None,
     download: bool = True,
+    tokenrig_ckpt: str = DEFAULT_TOKENRIG_CKPT,
 ) -> dict:
     """Locate the TokenRig ckpt, skin-VAE ckpt, and Qwen3 config, downloading if needed.
 
@@ -111,7 +112,7 @@ def resolve_weights(
 
     tokenrig_path = hf_hub_download(
         repo_id=HF_REPO_ID,
-        filename=DEFAULT_TOKENRIG_CKPT,
+        filename=tokenrig_ckpt,
         local_files_only=local_files_only,
         **ckpt_kwargs,
     )
@@ -145,6 +146,7 @@ def load_model(
     device: DeviceLike = "cpu",
     dtype: torch.dtype = torch.bfloat16,
     download: bool = True,
+    tokenrig_ckpt: str = DEFAULT_TOKENRIG_CKPT,
 ) -> SkinTokensModel:
     """Load TokenRig (+ skin-VAE + Qwen backbone) ready for ``predict_step``.
 
@@ -158,7 +160,9 @@ def load_model(
     """
     device = torch.device(device)
 
-    paths = resolve_weights(models_dir=models_dir, download=download)
+    paths = resolve_weights(
+        models_dir=models_dir, download=download, tokenrig_ckpt=tokenrig_ckpt
+    )
 
     ckpt = torch.load(paths["tokenrig"], map_location="cpu", weights_only=False)
     hp = ckpt["hyper_parameters"]

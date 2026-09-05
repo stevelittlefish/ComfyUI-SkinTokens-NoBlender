@@ -88,6 +88,18 @@ def test_loader_outputs_model_type():
     assert nodes.SkinTokensLoader.RETURN_TYPES == ("SKINTOKENS_MODEL",)
 
 
+def test_loader_is_a_model_dropdown():
+    it = nodes.SkinTokensLoader.INPUT_TYPES()["required"]
+    # A ComfyUI combo: first element is the list of options.
+    assert isinstance(it["model"][0], list) and it["model"][0]
+    assert it["model"][1]["default"] in it["model"][0]
+    # options map to real HF checkpoint paths.
+    for name in it["model"][0]:
+        assert nodes.MODELS[name].endswith(".ckpt")
+    # the confusing old widgets are gone.
+    assert "download" not in it and "models_dir" not in it
+
+
 def test_convention_keys_map_to_engine():
     assert nodes._CONVENTION_KEY["Mixamo"] == "mixamo"
     assert nodes._CONVENTION_KEY["UE5"] == "ue5"

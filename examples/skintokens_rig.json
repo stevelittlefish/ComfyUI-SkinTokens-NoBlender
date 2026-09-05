@@ -23,7 +23,7 @@
       "properties": {
         "Node name for S&R": "SkinTokensLoader"
       },
-      "widgets_values": [true, ""]
+      "widgets_values": ["articulation (GRPO)"]
     },
     {
       "id": 2,
