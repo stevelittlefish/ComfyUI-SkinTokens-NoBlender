@@ -25,9 +25,11 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Axis convention. joints are (J, 3) in the Asset's native frame.
 #   side = the left/right axis index (x by default).
-#   up   = the head/foot axis index (y by default; only used for thumb pick).
-# For all 4 validated rigs, +side == character-Left. If a first real animation
-# comes out mirrored, flip LEFT_IS_POSITIVE once (spec/04, "Left/Right caveat").
+#   up   = the head/foot axis index (y by default; used for thumb pick).
+# Left/Right is decided anatomically from the rig's own forward direction
+# (``orient.detect_forward`` reads the toes), so it is correct regardless of
+# which way a given generation faces. ``SIDE_AXIS`` / ``LEFT_IS_POSITIVE`` are
+# only the fallback when forward can't be detected (e.g. legs missing).
 # ---------------------------------------------------------------------------
 SIDE_AXIS = 0
 UP_AXIS = 1
@@ -125,6 +127,14 @@ def label_humanoid(
     joints = np.asarray(joints, dtype=np.float64)
     children, root = build_children(parents)
 
+    # Prefer an anatomical left/right axis derived from the rig's own forward
+    # direction (toes point forward); this is correct at any facing. Fall back to
+    # the fixed side-axis constant only when forward can't be detected.
+    from .orient import detect_forward, left_dir as _left_dir
+    forward = detect_forward(joints, parents, up_axis=UP_AXIS)
+    left_vec = _left_dir(forward, up_axis=UP_AXIS) if forward is not None else None
+    center = joints.mean(axis=0)
+
     @lru_cache(maxsize=None)
     def n_desc(n: int) -> int:
         """Number of descendants (subtree size excluding n itself)."""
@@ -144,7 +154,15 @@ def label_humanoid(
         return chain
 
     def pick_side(bones: List[int], want_left: bool) -> int:
-        """The bone on the character's left/right, by side-axis position."""
+        """The bone on the character's left/right.
+
+        Uses the anatomical left direction (up x forward) when available, so it
+        is correct regardless of which way the rig faces; otherwise falls back to
+        the fixed side-axis sign (LEFT_IS_POSITIVE).
+        """
+        if left_vec is not None:
+            key = (lambda b: float(np.dot(joints[b] - center, left_vec)))
+            return (max if want_left else min)(bones, key=key)
         want_positive = want_left == LEFT_IS_POSITIVE
         key = (lambda b: joints[b][SIDE_AXIS])
         return (max if want_positive else min)(bones, key=key)

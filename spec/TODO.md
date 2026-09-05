@@ -171,6 +171,16 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       dev/test, credits). Manager registry metadata already in `pyproject.toml`
       (`[tool.comfy]` PublisherId/DisplayName). Publish path via ComfyUI Manager.
 
+## Post-release fixes
+- [x] **Orientation robustness** (2026-09-05): SkinTokens emits a random facing per run, which
+      mislabeled left/right and made some rigs walk backwards (same confusion; thumb often
+      dropped too). Added `skintokens/orient.py` — `detect_forward` reads the toe->foot offset;
+      the relabeler now picks L/R via `up × forward` (correct at any facing, old side-axis
+      constant kept only as a legs-missing fallback); `export_glb` canonicalizes facing (yaws
+      mesh+normals+joints+IBMs to `CANONICAL_FORWARD` = -z) so rigs never walk backwards. Tests:
+      `tests/test_orient.py` + `test_export_canonicalizes_backwards_rig`. Confirmed against the
+      user's `android_rigged{,2}.glb` (both faced +z). Spec: `04-relabeler-spec.md`.
+
 ## Cross-cutting reminders
 - No Blender, no subprocess engine, no C++ runtime dependency.
 - Don't hardcode `cuda:0`; honor ComfyUI device/flags.

@@ -73,9 +73,26 @@ position only for left/right and thumb; this minimizes dependence on axis calibr
 > The earlier draft used the up-axis to find the spine; descendant-count (above) is more
 > robust and is the adopted approach. Keep the reference code below but prefer topology.
 
-### Left/Right caveat
-For all 4 validated models, **+side == character-Left**. If a first real animation comes out
-mirrored, flip the L/R rule once — it is then permanent. Expose it as a constant/param.
+### Left/Right — resolved by forward detection (2026-09-05)
+Originally L/R was decided by a fixed `+side == character-Left` constant, calibrated against
+4 rigs that happened to share a facing. In practice **SkinTokens emits a random facing per
+run** (some generations face +z, some -z), which broke this two ways: the fixed constant
+mislabels L/R on the opposite facing, *and* a back-facing rig walks backwards under an
+animation clip. Both are the same confusion (a mis-oriented rig also tends to drop the thumb).
+
+Fix: derive the rig's **forward** direction from geometry the model gets right — the toes
+(`orient.detect_forward`, toe-vs-foot offset; thumbs are deliberately not used, being absent
+exactly when the rig is confused). Then:
+- the relabeler picks Left/Right by projecting onto `up × forward`, so labels are anatomically
+  correct at **any** facing (`SIDE_AXIS`/`LEFT_IS_POSITIVE` remain only as a legs-missing
+  fallback); and
+- `export_glb` **canonicalizes facing** — yaws the whole rig (mesh, normals, joints, IBMs) so
+  the character faces the convention's forward (`orient.CANONICAL_FORWARD`, -z), which stops
+  the backwards-walking. Labels are index-attached, so rotation leaves them consistent.
+
+See `skintokens/orient.py`, `tests/test_orient.py`, and the export canonicalization test.
+If a real Kimodo animation ever shows the character facing the *wrong* way, flip
+`CANONICAL_FORWARD` once (that is the only remaining convention choice).
 
 ## Reference implementation (pure Python / numpy — adapt, don't blindly paste)
 

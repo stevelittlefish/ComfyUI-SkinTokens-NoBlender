@@ -268,6 +268,37 @@ def test_posing_gate(tmp_path):
     np.testing.assert_allclose(r_before, r_after, atol=1e-4)
 
 
+def test_export_canonicalizes_backwards_rig(tmp_path):
+    """A humanoid generated facing the wrong way is yaw-corrected on export.
+
+    SkinTokens emits a random facing per run; export must land every rig facing
+    the animation convention's forward so it never walks backwards. See
+    skintokens/orient.py and tests/test_orient.py.
+    """
+    from skintokens import orient
+    from tests.test_relabel import _humanoid
+
+    joints, parents, _ = _humanoid(with_fingers=False)  # builder faces +z
+    assert not np.allclose(orient.detect_forward(joints, parents), orient.CANONICAL_FORWARD)
+
+    J = joints.shape[0]
+    verts = joints.astype(np.float32)  # one vertex per joint, sharing the frame
+    faces = np.array([[i, (i + 1) % J, (i + 2) % J] for i in range(J)], dtype=np.int64)
+    skin = np.eye(J, dtype=np.float32)  # each vertex bound to its own joint
+    asset = Asset(vertices=verts, faces=faces, parents=parents, skin=skin)
+    ml = np.tile(np.eye(4, dtype=np.float32), (J, 1, 1))
+    ml[:, :3, 3] = joints
+    asset.matrix_local = ml
+
+    out = tmp_path / "canon.glb"
+    glb_io.export_glb(asset, out)
+
+    ej, ep, _ = glb_io.import_skeleton(out)
+    np.testing.assert_allclose(
+        orient.detect_forward(ej, ep), orient.CANONICAL_FORWARD, atol=1e-5
+    )
+
+
 def test_export_requires_rig(tmp_path):
     import trimesh
 
