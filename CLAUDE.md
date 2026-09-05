@@ -38,6 +38,34 @@ imported or vendored from directly at runtime. See [references/README.md](refere
 
 Run `references/pull.sh` to clone/update them.
 
+## Local dev environment
+
+- **Always use the venv** at `./.venv` (gitignored). It was created with
+  `uv venv` and runs **CPython 3.12** (ComfyUI-compatible; the server's exact
+  version is TBD once we have access). **Never install into system Python.**
+- Install deps: `uv pip install -r requirements-dev.txt` then
+  `uv pip install -e . --no-deps` (all into `.venv`).
+- `requirements.txt` = runtime deps for ComfyUI Manager (torch NOT listed —
+  ComfyUI provides it). `requirements-dev.txt` adds a CPU torch build + pytest
+  for GPU-less local work.
+- Run tests: `source .venv/bin/activate && python -m pytest -q`.
+
+## Testing strategy (no GPU / no ComfyUI here)
+
+- Do as much as possible with local pure-Python `pytest` — especially the
+  highest-risk paths: **glb export (Gate C)** and the **relabeler (Gate D)**.
+- Blender-parity checks become committed golden fixtures (no `bpy` locally).
+- GPU/server-only gates (inference B, ComfyUI/VRAM F, end-to-end E) are deferred
+  until we wire up access to the Comfy server (https://comfy.seaslug.ai/).
+- User provides test data (sample meshes/rigs) on request.
+
+## Vendored upstream
+
+`skintokens/vendor/` is the upstream SkinTokens torch core, copied verbatim minus
+Blender/server. See `skintokens/vendor/UPSTREAM.md` for the commit and the exact
+edits applied (import fixes, flash-attn → SDPA fallback, CPU guards). Don't
+hand-edit vendored files beyond those documented portability fixes.
+
 ## Git workflow
 
 - **Commit directly to `main`.**

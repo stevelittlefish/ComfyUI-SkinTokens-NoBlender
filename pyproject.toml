@@ -1,0 +1,24 @@
+[project]
+name = "comfyui-skintokens-noblender"
+version = "0.0.1"
+description = "SkinTokens auto-rigging nodes for ComfyUI — pure Python, no Blender required."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+# Runtime deps are tracked in requirements.txt (ComfyUI Manager reads that).
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["skintokens*"]
+
+# --- ComfyUI Manager / registry metadata ---
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI-SkinTokens-NoBlender"
+Icon = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,24 @@
+# Runtime dependencies for ComfyUI-SkinTokens-NoBlender.
+# torch is intentionally NOT pinned/listed hard: ComfyUI provides it. For local
+# dev outside ComfyUI it is installed via requirements-dev.txt (CPU build).
+
+# --- SkinTokens torch core (vendored from upstream; see skintokens/vendor/UPSTREAM.md) ---
+transformers>=4.57.0
+diffusers>=0.35.0
+einops
+omegaconf
+lightning
+python-box
+addict
+huggingface_hub
+numpy>=1.26.0
+scipy
+
+# --- pure-Python glb I/O (replaces upstream's Blender/bpy path) ---
+trimesh
+pygltflib
+
+# NOT bpy, NOT gradio/bottle/tornado (server pieces dropped),
+# NOT open3d / fast-simplification (only the optional voxel post-process needs
+# open3d; made optional in a later phase).
+# flash-attn is optional: the vendored code falls back to standard attention.

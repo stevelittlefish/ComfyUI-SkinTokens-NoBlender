@@ -1,0 +1,11 @@
+# Local development dependencies (installed into ./.venv, never system Python).
+# Includes a CPU torch build so the vendored torch core imports on a GPU-less
+# machine. ComfyUI supplies torch on the real server, so it is not in the
+# runtime requirements.txt.
+
+-r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
+pytest
