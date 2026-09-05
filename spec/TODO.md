@@ -3,22 +3,34 @@
 Phased task list for building the SkinTokens ComfyUI node pack. Do phases in order; each
 phase ends at a runnable/verifiable checkpoint. Gates refer to `07-validation.md`.
 
-## Phase 0 — Project setup
-- [ ] Create the repo; add `spec/` (this package) and `reference/` (upstream SkinTokens +
-      skin-tokens.cpp, gitignored or submodules). See `06`.
-- [ ] `pyproject.toml` + `requirements.txt` (trimesh, pygltflib, transformers, etc.; NO bpy,
-      NO gradio/bottle/tornado). Make `flash-attn` optional.
-- [ ] Vendor upstream torch core into `skintokens/vendor/` (model, tokenizer, data/{transform,
-      order,vertex_group,augment}, rig_package/info/asset.py). Record the upstream commit.
-- [ ] Fix imports in vendored code to drop bpy/server references. Get it importing.
+Status legend: `[x]` done · `[~]` partial / blocked · `[ ]` not started.
+GPU/server-only gates (B, E, F) are deferred until we have Comfy-server access; the
+laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
+
+## Phase 0 — Project setup ✅
+- [x] Create the repo; add `spec/` (this package) and `reference/` (upstream SkinTokens +
+      skin-tokens.cpp, gitignored or submodules). See `06`. (`references/`, gitignored.)
+- [x] `pyproject.toml` + `requirements.txt` (trimesh, pygltflib, transformers, etc.; NO bpy,
+      NO gradio/bottle/tornado). Make `flash-attn` optional. (Also `requirements-dev.txt`
+      with CPU torch + pytest for GPU-less local dev.)
+- [x] Vendor upstream torch core into `skintokens/vendor/` (whole `src/` minus bpy/server).
+      Upstream commit `273b691` recorded in `skintokens/vendor/UPSTREAM.md`.
+- [x] Fix imports in vendored code to drop bpy/server references. Get it importing.
+      (Also: flash-attn→SDPA fallbacks, idempotent OmegaConf resolvers, CUDA-absent guard.
+      Verified by `tests/test_vendor_imports.py`.)
 
 ## Phase 1 — Inference (no I/O yet)
-- [ ] `model_loader.py`: load TokenRig + skin-vae from HF checkpoints; auto-download.
-- [ ] `infer.py`: given an in-memory mesh (verts/faces/normals), build the `Asset`, run
+- [x] `model_loader.py`: load TokenRig + skin-vae from HF checkpoints; auto-download.
+      (Rewrites ckpt's baked-in relative paths for pretrained_vae + Qwen config.)
+- [x] `infer.py`: given an in-memory mesh (verts/faces/normals), build the `Asset`, run
       `predict_step`, return the rigged `Asset` (joints, parents, dense weights). Reuse the
       copied transform/sampling/normalization.
-- [ ] Temporary harness: feed a mesh loaded any quick way; confirm an Asset comes out.
-- [ ] **Gate B** (inference parity vs upstream demo.py).
+- [x] Temporary harness: `tests/test_infer.py` (CPU) covers `build_asset`, the sampler
+      transform, and input guards. Full run is `test_rig_mesh_end_to_end` (`server` marker).
+- [~] **Gate B** (inference parity vs upstream demo.py). BLOCKED: needs the ~14 GB model on
+      a GPU. Smoke test wired via `scripts/server/run-server-tests.sh`; true parity pending
+      server access. The `predict_transform` config, `cls`, and batch assembly are unproven
+      until this runs.
 
 ## Phase 2 — glb import (pure Python)
 - [ ] `glb_io.py` import: trimesh → verts/faces/normals/uv/mesh_names, matching the fields

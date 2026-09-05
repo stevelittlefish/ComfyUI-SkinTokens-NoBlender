@@ -66,6 +66,13 @@ Blender/server. See `skintokens/vendor/UPSTREAM.md` for the commit and the exact
 edits applied (import fixes, flash-attn → SDPA fallback, CPU guards). Don't
 hand-edit vendored files beyond those documented portability fixes.
 
+## Keep TODO.md current
+
+`spec/TODO.md` is the living build tracker. **Whenever a task lands (or gets
+blocked), update it in the same commit as the work** — tick `[x]` done,
+`[~]` partial/blocked (say why), and add a short parenthetical noting what was
+actually delivered or where it lives. Don't let it drift from reality.
+
 ## Git workflow
 
 - **Commit directly to `main`.**
