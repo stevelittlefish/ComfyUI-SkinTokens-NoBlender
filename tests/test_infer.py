@@ -128,7 +128,13 @@ def test_rig_mesh_end_to_end():
     from skintokens.model_loader import load_model
 
     verts, faces = _box()
-    bundle = load_model(device=os.environ.get("SKINTOKENS_DEVICE", "cuda"))
+    # Default: the shared HF cache (like the real node). Set SKINTOKENS_MODELS_DIR
+    # to reuse an existing local download instead of re-fetching to the cache.
+    models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
+    bundle = load_model(
+        device=os.environ.get("SKINTOKENS_DEVICE", "cuda"),
+        models_dir=models_dir,
+    )
     rigged = infer.rig_mesh(bundle, verts, faces)
     assert rigged.parents is not None and rigged.J > 0
     assert rigged.skin is not None and rigged.skin.shape[0] == verts.shape[0]

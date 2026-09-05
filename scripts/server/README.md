@@ -35,7 +35,10 @@ server tests. Nothing global is touched; ComfyUI's container is left alone.
    then `requirements.txt` + `pytest`, then this package (editable).
 3. Verifies `torch` imports and `torch.cuda.is_available()`; prints the GPU name.
 4. Runs `pytest -m server` with `SKINTOKENS_RUN_MODEL=1`. The first run downloads
-   the weights (~14 GB) via `huggingface_hub` into `./models/`.
+   the weights (~14 GB) via `huggingface_hub` into the shared HF cache
+   (`$HF_HOME` / `~/.cache/huggingface`) — the same default the real ComfyUI node
+   uses. To reuse a copy you already downloaded elsewhere, set
+   `SKINTOKENS_MODELS_DIR` to that directory.
 
 ## Configuration (environment variables)
 
@@ -44,7 +47,7 @@ server tests. Nothing global is touched; ComfyUI's container is left alone.
 | `TORCH_BACKEND`         | `auto`         | CUDA wheel selection for `uv` (e.g. `cu124`; `cpu` to force CPU). |
 | `VENV`                  | `.venv-server` | Where to create the server venv.                               |
 | `SKINTOKENS_DEVICE`     | `cuda`         | Torch device (e.g. `cuda:0`).                                   |
-| `SKINTOKENS_MODELS_DIR` | `./models`     | Where the weights are cached (via `load_model`).               |
+| `SKINTOKENS_MODELS_DIR` | *(unset)*      | Unset = use the shared HF cache (`$HF_HOME`). Set it to reuse a local copy and avoid re-downloading (e.g. `SKINTOKENS_MODELS_DIR=./models`). |
 
 If `uv`'s auto CUDA detection picks the wrong build, set `TORCH_BACKEND` to match
 your driver, e.g. `TORCH_BACKEND=cu124 ./scripts/server/run-server-tests.sh`.

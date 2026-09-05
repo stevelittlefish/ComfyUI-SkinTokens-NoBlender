@@ -74,44 +74,70 @@ class SkinTokensModel:
         return self
 
 
-def default_models_dir() -> Path:
-    """Where weights are cached when the caller does not specify a directory.
-
-    Phase 5 will route this through ComfyUI's ``folder_paths``; until then it is a
-    ``models/`` directory next to the repo (override with ``models_dir=``).
-    """
-    return Path(__file__).resolve().parent.parent / "models"
-
-
-def download_weights(models_dir: Optional[Path] = None) -> dict:
-    """Download the TokenRig ckpt, the skin-VAE ckpt, and the Qwen3 config.
+def resolve_weights(
+    models_dir: Optional[Path] = None,
+    download: bool = True,
+) -> dict:
+    """Locate the TokenRig ckpt, skin-VAE ckpt, and Qwen3 config, downloading if needed.
 
     Weights are large (~14 GB) and are NOT bundled; this mirrors upstream
     ``download.py``. Returns absolute paths to the two checkpoints and the Qwen
-    config directory. Requires network access (and HF auth if the repo is gated).
+    config directory.
+
+    ``models_dir``:
+      - ``None`` (default): use the standard HuggingFace cache (``$HF_HOME`` /
+        ``~/.cache/huggingface``), shared with other HF tools — no duplicate copy.
+      - a path: download a private copy into that directory (e.g. a
+        ComfyUI-visible ``models/skintokens`` dir).
+
+    ``download``: when ``False``, resolve from cache/disk only (``local_files_only``)
+    and never hit the network — for airgapped or pre-staged installs.
+
+    HF auth (for gated repos) is picked up automatically from the ambient token
+    (``huggingface-cli login`` / ``$HF_TOKEN``); we never handle it directly.
     """
     from huggingface_hub import hf_hub_download, snapshot_download
 
-    models_dir = Path(models_dir) if models_dir is not None else default_models_dir()
-    models_dir.mkdir(parents=True, exist_ok=True)
+    local_files_only = not download
+    # When models_dir is given, download copies into it; otherwise use the HF cache.
+    if models_dir is not None:
+        models_dir = Path(models_dir)
+        models_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_kwargs = {"local_dir": str(models_dir)}
+        qwen_kwargs = {"local_dir": str(models_dir / "Qwen3-0.6B")}
+    else:
+        ckpt_kwargs = {}
+        qwen_kwargs = {}
 
     tokenrig_path = hf_hub_download(
-        repo_id=HF_REPO_ID, filename=DEFAULT_TOKENRIG_CKPT, local_dir=str(models_dir)
+        repo_id=HF_REPO_ID,
+        filename=DEFAULT_TOKENRIG_CKPT,
+        local_files_only=local_files_only,
+        **ckpt_kwargs,
     )
     skin_vae_path = hf_hub_download(
-        repo_id=HF_REPO_ID, filename=DEFAULT_SKIN_VAE_CKPT, local_dir=str(models_dir)
+        repo_id=HF_REPO_ID,
+        filename=DEFAULT_SKIN_VAE_CKPT,
+        local_files_only=local_files_only,
+        **ckpt_kwargs,
     )
     # Config only (no weights) — the transformer weights come from the ckpt.
     qwen_dir = snapshot_download(
         repo_id=QWEN_REPO_ID,
-        local_dir=str(models_dir / "Qwen3-0.6B"),
         ignore_patterns=["*.bin", "*.safetensors"],
+        local_files_only=local_files_only,
+        **qwen_kwargs,
     )
     return {
         "tokenrig": str(Path(tokenrig_path).resolve()),
         "skin_vae": str(Path(skin_vae_path).resolve()),
         "qwen_dir": str(Path(qwen_dir).resolve()),
     }
+
+
+# Backwards-compatible alias.
+def download_weights(models_dir: Optional[Path] = None) -> dict:
+    return resolve_weights(models_dir=models_dir, download=True)
 
 
 def load_model(
@@ -124,21 +150,15 @@ def load_model(
 
     The checkpoint bakes in *relative* paths to the skin-VAE ckpt and the Qwen
     config (resolved against the original training CWD). We rewrite those to the
-    downloaded absolute locations before constructing the model, so loading works
+    resolved absolute locations before constructing the model, so loading works
     from any directory.
+
+    ``models_dir`` / ``download`` behave as in :func:`resolve_weights` — default
+    is the shared HF cache with auto-download.
     """
     device = torch.device(device)
 
-    if download:
-        paths = download_weights(models_dir)
-    else:
-        # Assume already downloaded into the standard layout.
-        root = Path(models_dir) if models_dir is not None else default_models_dir()
-        paths = {
-            "tokenrig": str((root / DEFAULT_TOKENRIG_CKPT).resolve()),
-            "skin_vae": str((root / DEFAULT_SKIN_VAE_CKPT).resolve()),
-            "qwen_dir": str((root / "Qwen3-0.6B").resolve()),
-        }
+    paths = resolve_weights(models_dir=models_dir, download=download)
 
     ckpt = torch.load(paths["tokenrig"], map_location="cpu", weights_only=False)
     hp = ckpt["hyper_parameters"]
