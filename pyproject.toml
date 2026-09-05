@@ -1,12 +1,15 @@
 [project]
 name = "comfyui-skintokens-noblender"
 version = "0.0.1"
-description = "SkinTokens auto-rigging nodes for ComfyUI — pure Python, no Blender required."
+description = "Auto-rig a static mesh into a skinned .glb (skeleton + weights) - pure Python, no Blender."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 # Runtime deps are tracked in requirements.txt (ComfyUI Manager reads that).
 dynamic = ["dependencies"]
+
+[project.urls]
+Repository = "https://github.com/stevelittlefish/ComfyUI-SkinTokens-NoBlender"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }

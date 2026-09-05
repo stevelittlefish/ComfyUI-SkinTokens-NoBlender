@@ -1,0 +1,27 @@
+name: Publish to Comfy Registry
+
+# Publishes to registry.comfy.org whenever the version in pyproject.toml changes
+# on main. Bump [project] version, commit, push -> a new registry version goes
+# live. The registry rejects re-publishing an existing version, so the version
+# bump is what gates a publish. Can also be run by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+jobs:
+  publish-node:
+    name: Publish custom node
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Publish to registry
+        uses: Comfy-Org/publish-node-action@v1
+        with:
+          # The registry API key, stored as a repo Actions secret (never in the
+          # repo). Rotate it on registry.comfy.org and re-set the secret; nothing
+          # here changes.
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
