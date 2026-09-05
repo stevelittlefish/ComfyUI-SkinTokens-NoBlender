@@ -27,10 +27,12 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       copied transform/sampling/normalization.
 - [x] Temporary harness: `tests/test_infer.py` (CPU) covers `build_asset`, the sampler
       transform, and input guards. Full run is `test_rig_mesh_end_to_end` (`server` marker).
-- [~] **Gate B** (inference parity vs upstream demo.py). BLOCKED: needs the ~14 GB model on
-      a GPU. Smoke test wired via `scripts/server/run-server-tests.sh`; true parity pending
-      server access. The `predict_transform` config, `cls`, and batch assembly are unproven
-      until this runs.
+- [~] **Gate B** (inference parity vs upstream demo.py). Smoke test PASSES on the server
+      (`test_rig_mesh_end_to_end` via `scripts/server/run-server-tests.sh`): model loads and
+      `predict_step` returns a rigged Asset (skeleton + skin weights). Confirms the
+      `predict_transform` config, `cls="articulation"`, and batch assembly are correct.
+      Still TODO for full parity: compare joints/parents/weights against upstream `demo.py`
+      on the same mesh (needs a shared input + upstream run on the server).
 
 ## Phase 2 — glb import (pure Python)
 - [ ] `glb_io.py` import: trimesh → verts/faces/normals/uv/mesh_names, matching the fields
