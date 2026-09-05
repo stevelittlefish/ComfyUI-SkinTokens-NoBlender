@@ -92,9 +92,14 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       import with an absolute fallback so pytest can import it without package context).
       `comfy.*`/`torch`/`folder_paths` imported lazily inside methods, so importing the pack
       (what ComfyUI does at startup to read NODE_CLASS_MAPPINGS) needs no GPU/model.
-- [x] Mesh I/O socket type = **STRING filepaths** (spec/05 safe default for the automation
-      use case; resolves relative paths via `folder_paths` input/output dirs). A custom MESH
-      socket can be added later if graph-native chaining is wanted — CONFIRM with user.
+- [x] Mesh I/O socket type = ComfyUI's **native 3D types** (decided with user after
+      inspecting the Trellis workflow + ComfyUIDocker core): `SkinTokensRig` accepts a native
+      `MESH` (rigs straight from its vertex/face/normal tensors) OR a `File3D`
+      (`FILE_3D_GLB/GLTF/OBJ/STL`); rigged output is `FILE_3D_GLB` (the glb carries the
+      skeleton+skin; the `MESH` type has no armature). Drops into Load3D/Trellis/remesh →
+      Rig → Preview3DAdvanced(showSkeleton)/Save3D. Bridge in `skintokens/comfy_types.py`
+      (duck-typed, `comfy_api`/`torch` lazy; `make_file3d` falls back to a path string
+      without ComfyUI so it stays testable).
 - [x] Wrap the model for `comfy.model_management` (`skintokens/comfy_model.py`): a
       `ModelPatcher` over the nn.Module with `get_torch_device()`/`unet_offload_device()`,
       loaded to CPU by the Loader and moved to GPU on demand via `load_models_gpu` in
@@ -105,7 +110,8 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       registration/INPUT_TYPES contract, the pure-Python `relabel_glb` path (via
       `SkinTokensRelabel`, tested on rigged glbs built from the Gate-D skeleton fixtures,
       incl. joint-index stability), and the VRAM wrapper's fallback/size estimator
-      (`tests/test_nodes.py`, 14 tests). Server TODO: real load-on-demand + eviction + no-leak
+      the native-type bridge conversions (`tests/test_nodes.py`, 19 tests). Server TODO:
+      real load-on-demand + eviction + no-leak
       against the pinned ComfyUI's `model_management` API (validate the ModelPatcher contract).
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
@@ -115,6 +121,9 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
 - [ ] `use_skeleton` (skin-only against an existing armature): armature import in glb_io.
 - [ ] `SkinTokensPreview3D` node + `web/js/` three.js extension (`05`/`08`). **Bundle
       three.js + GLTFLoader locally — no CDN.** Serve via `/view` + `folder_paths`.
+      NOTE (Phase 5 finding): core ComfyUI's `Preview3DAdvanced` already previews our
+      `FILE_3D_GLB` output and has a `showSkeleton` toggle — a custom preview node may be
+      redundant. Revisit whether this is still worth building.
 
 ## Phase 7 — End-to-end + packaging
 - [ ] **Gate E** (end-to-end through Kimodo on ai.lemon.com — the real acceptance test).

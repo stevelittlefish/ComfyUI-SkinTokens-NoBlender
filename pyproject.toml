@@ -19,7 +19,7 @@ include = ["skintokens*"]
 
 # --- ComfyUI Manager / registry metadata ---
 [tool.comfy]
-PublisherId = ""
+PublisherId = "stevelittlefish"
 DisplayName = "ComfyUI-SkinTokens-NoBlender"
 Icon = ""
 

@@ -68,9 +68,18 @@ def test_node_mappings_present():
 def test_rig_input_contract():
     it = nodes.SkinTokensRig.INPUT_TYPES()["required"]
     assert it["model"][0] == "SKINTOKENS_MODEL"
-    assert it["glb"][0] == "STRING"
+    # mesh socket accepts native MESH or any FILE_3D_* (comma-joined type string).
+    accepted = it["mesh"][0].split(",")
+    assert "MESH" in accepted and "FILE_3D_GLB" in accepted
     assert it["convention"][0] == nodes.CONVENTIONS
-    assert nodes.SkinTokensRig.RETURN_TYPES == ("STRING",)
+    assert nodes.SkinTokensRig.RETURN_TYPES == ("FILE_3D_GLB",)
+
+
+def test_relabel_input_output_contract():
+    it = nodes.SkinTokensRelabel.INPUT_TYPES()["required"]
+    accepted = it["glb"][0].split(",")
+    assert "FILE_3D_GLB" in accepted and "MESH" not in accepted  # rigged file only
+    assert nodes.SkinTokensRelabel.RETURN_TYPES == ("FILE_3D_GLB",)
 
 
 def test_loader_outputs_model_type():
@@ -126,6 +135,75 @@ def test_relabel_glb_on_unrigged_raises(tmp_path):
         glb_io.relabel_glb(p, str(tmp_path / "out.glb"))
 
 
+# --- native-type bridge (comfy_types) ---------------------------------------
+
+
+class _FakeFile3D:
+    """Minimal stand-in for ComfyUI's File3D (disk-backed) for tests."""
+
+    def __init__(self, path):
+        self._path = path
+        self.format = "glb"
+
+    def get_source(self):
+        return self._path
+
+    def get_bytes(self):
+        return Path(self._path).read_bytes()
+
+    def save_to(self, dest):
+        import shutil
+
+        shutil.copy2(self._path, dest)
+        return dest
+
+
+class _FakeMesh:
+    """Minimal stand-in for ComfyUI's MESH (batched numpy tensors)."""
+
+    def __init__(self, vertices, faces, normals=None):
+        # batch dim (B, N, 3) like the real type.
+        self.vertices = vertices[None]
+        self.faces = faces[None]
+        self.normals = normals[None] if normals is not None else None
+
+
+def test_comfy_mesh_to_arrays_takes_batch_item0():
+    from skintokens import comfy_types
+
+    v = np.arange(12, dtype=np.float32).reshape(4, 3)
+    f = np.array([[0, 1, 2], [1, 2, 3]], dtype=np.int64)
+    n = np.ones((4, 3), dtype=np.float32)
+    verts, faces, normals = comfy_types.comfy_mesh_to_arrays(_FakeMesh(v, f, n))
+    assert verts.shape == (4, 3) and faces.shape == (2, 3)
+    assert np.allclose(verts, v) and normals.shape == (4, 3)
+
+
+def test_is_comfy_mesh_vs_file3d(tmp_path):
+    from skintokens import comfy_types
+
+    src = _rigged_glb_from_fixture("knight", str(tmp_path / "k.glb"))
+    assert comfy_types.is_file3d(_FakeFile3D(src))
+    assert not comfy_types.is_comfy_mesh(_FakeFile3D(src))
+    assert comfy_types.is_comfy_mesh(
+        _FakeMesh(np.zeros((1, 3), np.float32), np.zeros((1, 3), np.int64))
+    )
+
+
+def test_file3d_to_path_disk_backed(tmp_path):
+    from skintokens import comfy_types
+
+    src = _rigged_glb_from_fixture("knight", str(tmp_path / "k.glb"))
+    assert comfy_types.file3d_to_path(_FakeFile3D(src)) == src
+
+
+def test_make_file3d_fallback_returns_path_without_comfy():
+    from skintokens import comfy_types
+
+    # comfy_api is not importable here -> falls back to the path string.
+    assert comfy_types.make_file3d("/tmp/x.glb", "glb") == "/tmp/x.glb"
+
+
 # --- standalone relabel node ------------------------------------------------
 
 
@@ -134,17 +212,20 @@ def test_relabel_node_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(nodes, "_output_dir", lambda: str(tmp_path))
 
     node = nodes.SkinTokensRelabel()
-    (out_path,) = node.relabel(glb=src, convention="Mixamo", filename_prefix="out")
+    # comfy_api absent -> make_file3d returns the output path string.
+    (out_path,) = node.relabel(
+        glb=_FakeFile3D(src), convention="Mixamo", filename_prefix="out"
+    )
 
     assert Path(out_path).parent == tmp_path
     names = {n.name for n in GLTF2().load_binary(out_path).nodes}
     assert "mixamorig:Hips" in names
 
 
-def test_relabel_node_missing_file_raises(tmp_path, monkeypatch):
+def test_relabel_node_rejects_non_file3d(tmp_path, monkeypatch):
     monkeypatch.setattr(nodes, "_output_dir", lambda: str(tmp_path))
-    with pytest.raises(FileNotFoundError):
-        nodes.SkinTokensRelabel().relabel(glb=str(tmp_path / "nope.glb"))
+    with pytest.raises(TypeError):
+        nodes.SkinTokensRelabel().relabel(glb="/some/path.glb")  # bare string, not File3D
 
 
 # --- VRAM wrapper (no-ComfyUI fallback + size estimator) --------------------

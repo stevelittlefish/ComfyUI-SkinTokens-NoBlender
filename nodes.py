@@ -3,22 +3,32 @@
 Three nodes:
   * ``SkinTokensLoader`` — load the TokenRig model, wrapped for ComfyUI's VRAM
     management (``SKINTOKENS_MODEL`` output).
-  * ``SkinTokensRig``    — static mesh glb -> rigged skinned glb (+ optional relabel).
+  * ``SkinTokensRig``    — static mesh -> rigged skinned glb (+ optional relabel).
   * ``SkinTokensRelabel``— standalone structural relabel of an already-rigged glb.
 
-I/O uses **STRING filepaths** for meshes (spec/05 I/O decision: the safe default
-for the automation use case; a custom MESH socket can be added later).
+Mesh I/O uses ComfyUI's **native 3D types** so the nodes drop into the standard
+3D graph (Load3D / Trellis / remesh / Preview3DAdvanced / Save3D):
+  * ``SkinTokensRig`` accepts a native ``MESH`` (from the Trellis/remesh chain) or
+    a ``File3D`` (``FILE_3D_GLB``/``GLTF``/``OBJ``/``STL``, from Load3D).
+  * The rigged output is a ``FILE_3D_GLB`` — the glb file carries the skeleton +
+    skin weights (the ``MESH`` type has no armature), and it feeds
+    ``Preview3DAdvanced`` (showSkeleton) / ``Save3D`` directly.
 
-ComfyUI-only imports (``comfy.*``, ``folder_paths``, ``torch``) are done lazily
-inside methods so this module imports cleanly under local pytest, where the node
-*logic* that needs them is not exercised. ComfyUI reads NODE_CLASS_MAPPINGS at
-startup; that must never require a GPU or the model.
+ComfyUI-only imports (``comfy.*``, ``folder_paths``, ``torch``, ``comfy_api``) are
+done lazily inside methods / the bridge module so this file imports cleanly under
+local pytest, where the paths that need them are not exercised. ComfyUI reads
+NODE_CLASS_MAPPINGS at startup; that must never require a GPU or the model.
 """
 
 from __future__ import annotations
 
 import os
 from typing import Tuple
+
+from skintokens.comfy_types import (
+    MESH_OR_FILE3D_TYPES,
+    RIGGED_FILE3D_TYPES,
+)
 
 CONVENTIONS = ["Mixamo", "UE5"]
 _CONVENTION_KEY = {"Mixamo": "mixamo", "UE5": "ue5"}
@@ -34,21 +44,6 @@ def _output_dir() -> str:
         return folder_paths.get_output_directory()
     except Exception:
         return os.getcwd()
-
-
-def _resolve_input(path: str) -> str:
-    """Resolve a possibly-relative input mesh path against ComfyUI's input dir."""
-    if os.path.isabs(path) or os.path.exists(path):
-        return path
-    try:
-        import folder_paths
-
-        candidate = os.path.join(folder_paths.get_input_directory(), path)
-        if os.path.exists(candidate):
-            return candidate
-    except Exception:
-        pass
-    return path
 
 
 def _unique_output_path(filename: str) -> str:
@@ -101,14 +96,14 @@ class SkinTokensLoader:
 
 
 class SkinTokensRig:
-    """Rig a static mesh glb -> rigged skinned glb (+ optional Mixamo/UE5 relabel)."""
+    """Rig a mesh (native MESH or File3D) -> rigged skinned glb (FILE_3D_GLB)."""
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "model": ("SKINTOKENS_MODEL",),
-                "glb": ("STRING", {"default": "input.glb"}),
+                "mesh": (MESH_OR_FILE3D_TYPES,),
                 "filename_prefix": ("STRING", {"default": "skintokens_rigged"}),
                 "relabel": ("BOOLEAN", {"default": True}),
                 "convention": (CONVENTIONS, {"default": "Mixamo"}),
@@ -123,7 +118,7 @@ class SkinTokensRig:
             },
         }
 
-    RETURN_TYPES = ("STRING",)
+    RETURN_TYPES = ("FILE_3D_GLB",)
     RETURN_NAMES = ("rigged_glb",)
     FUNCTION = "rig"
     CATEGORY = CATEGORY
@@ -131,7 +126,7 @@ class SkinTokensRig:
     def rig(
         self,
         model,
-        glb: str,
+        mesh,
         filename_prefix: str = "skintokens_rigged",
         relabel: bool = True,
         convention: str = "Mixamo",
@@ -141,12 +136,8 @@ class SkinTokensRig:
         temperature: float = 1.0,
         repetition_penalty: float = 2.0,
         num_beams: int = 10,
-    ) -> Tuple[str]:
-        from skintokens import glb_io, infer, relabel as relabel_mod
-
-        in_path = _resolve_input(glb)
-        if not os.path.exists(in_path):
-            raise FileNotFoundError(f"input mesh not found: {glb}")
+    ) -> Tuple:
+        from skintokens import comfy_types, glb_io, infer, relabel as relabel_mod
 
         bundle = model.prepare()  # ComfyUI moves weights to the compute device
         generate_kwargs = dict(
@@ -157,7 +148,20 @@ class SkinTokensRig:
             num_beams=int(num_beams),
         )
 
-        rigged = infer.rig_glb(bundle, in_path, generate_kwargs=generate_kwargs)
+        # Accept a native MESH (rig from its arrays) or a File3D (rig from file).
+        if comfy_types.is_comfy_mesh(mesh):
+            verts, faces, normals = comfy_types.comfy_mesh_to_arrays(mesh)
+            rigged = infer.rig_mesh(
+                bundle, verts, faces, normals=normals, generate_kwargs=generate_kwargs
+            )
+        elif comfy_types.is_file3d(mesh):
+            in_path = comfy_types.file3d_to_path(mesh)
+            rigged = infer.rig_glb(bundle, in_path, generate_kwargs=generate_kwargs)
+        else:
+            raise TypeError(
+                f"SkinTokensRig: unsupported mesh input {type(mesh)!r} "
+                "(expected a ComfyUI MESH or a FILE_3D_* object)"
+            )
 
         if relabel:
             relabel_mod.relabel_asset(
@@ -168,7 +172,7 @@ class SkinTokensRig:
 
         out_path = _unique_output_path(filename_prefix + ".glb")
         glb_io.export_glb(rigged, out_path)
-        return (out_path,)
+        return (comfy_types.make_file3d(out_path, "glb"),)
 
 
 class SkinTokensRelabel:
@@ -178,30 +182,32 @@ class SkinTokensRelabel:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "glb": ("STRING", {"default": "rigged.glb"}),
+                "glb": (RIGGED_FILE3D_TYPES,),
                 "filename_prefix": ("STRING", {"default": "skintokens_relabeled"}),
                 "convention": (CONVENTIONS, {"default": "Mixamo"}),
                 "relabel_fingers": ("BOOLEAN", {"default": True}),
             },
         }
 
-    RETURN_TYPES = ("STRING",)
+    RETURN_TYPES = ("FILE_3D_GLB",)
     RETURN_NAMES = ("relabeled_glb",)
     FUNCTION = "relabel"
     CATEGORY = CATEGORY
 
     def relabel(
         self,
-        glb: str,
+        glb,
         filename_prefix: str = "skintokens_relabeled",
         convention: str = "Mixamo",
         relabel_fingers: bool = True,
-    ) -> Tuple[str]:
-        from skintokens import glb_io
+    ) -> Tuple:
+        from skintokens import comfy_types, glb_io
 
-        in_path = _resolve_input(glb)
-        if not os.path.exists(in_path):
-            raise FileNotFoundError(f"input glb not found: {glb}")
+        if not comfy_types.is_file3d(glb):
+            raise TypeError(
+                f"SkinTokensRelabel: expected a FILE_3D_* object, got {type(glb)!r}"
+            )
+        in_path = comfy_types.file3d_to_path(glb)
 
         out_path = _unique_output_path(filename_prefix + ".glb")
         glb_io.relabel_glb(
@@ -210,7 +216,7 @@ class SkinTokensRelabel:
             convention=_CONVENTION_KEY[convention],
             with_fingers=relabel_fingers,
         )
-        return (out_path,)
+        return (comfy_types.make_file3d(out_path, "glb"),)
 
 
 NODE_CLASS_MAPPINGS = {
