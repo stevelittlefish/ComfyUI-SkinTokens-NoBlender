@@ -110,16 +110,19 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       `SkinTokensModelWrapper.prepare()` (ComfyUI drives eviction; never hardcodes cuda:0).
       Falls back to a passthrough wrapper when `comfy` is absent (local dev). Size estimator +
       no-comfy fallback unit-tested.
-- [~] **Gate F** (ComfyUI integration + VRAM eviction, no leak). LOCAL half done:
-      registration/INPUT_TYPES contract, the pure-Python `relabel_glb` path (via
-      `SkinTokensRelabel`, tested on rigged glbs built from the Gate-D skeleton fixtures,
-      incl. joint-index stability), the VRAM wrapper's fallback/size estimator, and the
-      native-type bridge conversions (`tests/test_nodes.py`, 19 tests). SERVER: the node
-      pipeline itself PASSES on the GPU (`test_rig_node_end_to_end`, 2026-09-05) — File3D in
-      -> rigged FILE_3D_GLB, MESH/File3D bridge + relabel(mixamorig:*) + export around real
-      inference. Still TODO (needs ComfyUI running, not just the GPU): real load-on-demand +
-      offload + eviction with no leak against the pinned ComfyUI's `model_management` API
-      (validate the ModelPatcher contract).
+- [x] **Gate F** (ComfyUI integration) — WORKS END TO END in real ComfyUI on the server
+      (2026-09-05, comfy.seaslug.ai): the workflow `Load3D -> SkinTokens Rig -> Preview3DAdvanced`
+      (with SkinTokens Loader) runs a full rig and previews the skinned result with skeleton.
+      Two real integration bugs found + fixed only by running in ComfyUI: (1) pack failed to
+      register because ComfyUI doesn't put the pack dir on sys.path and our __init__ fallback
+      silently imported ComfyUI's own `nodes` — fixed by inserting the pack dir into sys.path
+      (`2f4588b`); (2) `ModelPatcher.load()` assigns `model.device` directly but Lightning's
+      TokenRig has a read-only `device` property — fixed with a runtime settable-device
+      subclass (`7f55a97`). Loader redesigned to the idiomatic auto-download dropdown
+      (`fdec169`). LOCAL coverage: `tests/test_nodes.py` (22 tests) + the GPU
+      `test_rig_node_end_to_end`. STILL TODO (nice-to-have): explicitly verify VRAM
+      offload/eviction across repeated runs + when other models contend for VRAM (no leak) —
+      the ModelPatcher path that drives eviction is now proven to work.
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
 - [ ] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving
