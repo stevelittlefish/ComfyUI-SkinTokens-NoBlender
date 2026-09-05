@@ -6,11 +6,16 @@ labels the ~22 core body bones (+ fingers) correctly, in both Mixamo and UE5
 conventions, and that left/right is decided by position (mirror test).
 """
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from skintokens import relabel
 from skintokens.vendor.rig_package.info.asset import Asset
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "rigs"
 
 
 # --- rig builder -----------------------------------------------------------
@@ -200,6 +205,73 @@ def test_relabel_asset_preserves_unrecognized():
     asset = _make_asset(extra, extra_parents)
     relabel.relabel_asset(asset, convention="mixamo")
     assert asset.joint_names[-1] == f"bone_{extra_parents.shape[0] - 1}"
+
+
+# --- Gate D: real validation rigs (golden fixtures) ------------------------
+
+# Skeletons extracted from the 4 SkinTokens validation outputs (spec/04): the
+# joint world positions + parents from each rigged .glb, stored as small JSON
+# (no mesh). Bone counts match the spec's validation exactly.
+_REAL_RIGS = {
+    "knight": 34,
+    "peasant": 34,
+    "robot_industrial": 41,
+    "sci-fi-dude": 52,
+}
+
+# The ~22 core body bones every humanoid must resolve (what Kimodo drives).
+_CORE_MIXAMO = [
+    "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
+    "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand",
+    "RightShoulder", "RightArm", "RightForeArm", "RightHand",
+    "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase",
+    "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase",
+]
+_CORE_UE5 = [
+    "pelvis", "spine_01", "spine_02", "spine_03", "neck_01", "head",
+    "clavicle_l", "upperarm_l", "lowerarm_l", "hand_l",
+    "clavicle_r", "upperarm_r", "lowerarm_r", "hand_r",
+    "thigh_l", "calf_l", "foot_l", "ball_l",
+    "thigh_r", "calf_r", "foot_r", "ball_r",
+]
+
+
+def _load_rig(name):
+    d = json.loads((_FIXTURES / f"{name}.json").read_text())
+    return np.array(d["joints"], dtype=np.float64), np.array(d["parents"], dtype=np.int64)
+
+
+@pytest.mark.parametrize("name,n_bones", _REAL_RIGS.items())
+def test_real_rig_core_mixamo(name, n_bones):
+    joints, parents = _load_rig(name)
+    assert parents.shape[0] == n_bones
+    m = relabel.label_humanoid(joints, parents, convention="mixamo")
+    got = set(m.values())
+    for role in _CORE_MIXAMO:
+        assert f"mixamorig:{role}" in got, f"{name} missing {role}"
+
+
+@pytest.mark.parametrize("name", list(_REAL_RIGS))
+def test_real_rig_core_ue5(name):
+    joints, parents = _load_rig(name)
+    m = relabel.label_humanoid(joints, parents, convention="ue5")
+    got = set(m.values())
+    for role in _CORE_UE5:
+        assert role in got, f"{name} missing {role}"
+
+
+@pytest.mark.parametrize("name", list(_REAL_RIGS))
+def test_real_rig_first_ten_indices(name):
+    """The first 10 bones are identical across all rigs (spec/04 key finding)."""
+    joints, parents = _load_rig(name)
+    m = relabel.label_humanoid(joints, parents, convention="mixamo")
+    expected = [
+        "mixamorig:Hips", "mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2",
+        "mixamorig:Neck", "mixamorig:Head", "mixamorig:LeftShoulder",
+        "mixamorig:LeftArm", "mixamorig:LeftForeArm", "mixamorig:LeftHand",
+    ]
+    for i, name_i in enumerate(expected):
+        assert m[i] == name_i, f"{name} bone {i}: {m.get(i)} != {name_i}"
 
 
 def test_unknown_convention_raises():

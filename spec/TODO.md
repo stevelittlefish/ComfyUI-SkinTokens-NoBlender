@@ -78,11 +78,13 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       `asset.joint_names` for the glTF node names).
 - [x] Fingers: optional (`with_fingers`), per `04` (thumb=min up-axis; remaining sorted
       by side axis; 3-finger special case -> [thumb, index, pinky]).
-- [~] **Gate D** — LOCAL half PASSES (`tests/test_relabel.py`, 10 tests): Mixamo + UE5
-      core-bone labeling on a synthetic validated-topology humanoid, mirror test (L/R by
-      position), 5-finger + 3-finger + fingers-off, asset in-place rename, unrecognized-joint
-      preservation, and the armature-root-above-pelvis case. Still TODO: run on the **4 real
-      sample rigs** (user to provide) to confirm against the empirically validated mapping.
+- [x] **Gate D** PASSES (`tests/test_relabel.py`, 22 tests). Synthetic half: Mixamo + UE5
+      core labeling, mirror test (L/R by position), 5/3/off fingers, asset in-place rename,
+      unrecognized-joint preservation, armature-root-above-pelvis. REAL half: the full core-22
+      resolves correctly on **all 4 validation rigs** (knight/peasant 34, robot 41, sci-fi 52 —
+      bone counts match spec/04) in both conventions, and the first-10 indices match the
+      documented mapping. Skeletons committed as `tests/fixtures/rigs/*.json` (joints+parents
+      extracted from the rigged .glb, no mesh; ~6 KB total).
 
 ## Phase 5 — ComfyUI nodes
 - [ ] `nodes.py`: `SkinTokensLoader`, `SkinTokensRig` (relabel + params toggles), optional
