@@ -164,3 +164,37 @@ def test_rig_glb_end_to_end():
     rigged = infer.rig_glb(bundle, glb)
     assert rigged.parents is not None and rigged.J > 0
     assert rigged.skin is not None and rigged.skin.shape[0] == n_verts
+
+
+@pytest.mark.server
+@pytest.mark.skipif(
+    not os.environ.get("SKINTOKENS_RUN_MODEL"),
+    reason="needs the ~14 GB model + GPU (Gate B, server-side)",
+)
+def test_rig_glb_to_file_roundtrip(tmp_path):
+    # Full pipeline on a real mesh: glb in -> skinned glb out, re-importable.
+    from pathlib import Path
+
+    import trimesh
+    from pygltflib import GLTF2
+
+    from skintokens.model_loader import load_model
+
+    glb = Path("references/SkinTokens/examples/giraffe.glb")
+    if not glb.exists():
+        pytest.skip("run references/pull.sh to fetch the sample glb")
+
+    models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
+    bundle = load_model(
+        device=os.environ.get("SKINTOKENS_DEVICE", "cuda"), models_dir=models_dir
+    )
+    out = tmp_path / "giraffe_rigged.glb"
+    rigged = infer.rig_glb_to_file(bundle, glb, out)
+
+    assert out.exists()
+    trimesh.load(out, process=False)  # re-imports without error
+    g = GLTF2().load_binary(str(out))
+    assert len(g.skins) == 1 and len(g.skins[0].joints) == rigged.J
+    prim = g.meshes[0].primitives[0]
+    assert prim.attributes.JOINTS_0 is not None
+    assert prim.attributes.WEIGHTS_0 is not None

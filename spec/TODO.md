@@ -48,12 +48,24 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       upstream's Blender Z-up — calibration deferred to Phase 3 (must match export).
 
 ## Phase 3 — glb export (THE hard part — read `03` + glb.cpp first)
-- [ ] Calibrate the Asset's native axis convention (up axis, side axis); document constants.
-- [ ] `glb_io.py` export: build joint nodes + hierarchy, skin with inverseBindMatrices,
-      top-4 JOINTS_0/WEIGHTS_0 (group_per_vertex=4), one-frame rest pose. Match glb.cpp.
-- [ ] Wire `tokenrig.py` make_asset to the new exporter (replace the BpyParser import).
-- [ ] **Gate C** (export correctness — including the POSING gate). Do not proceed until the
-      posing gate passes.
+- [~] Calibrate the Asset's native axis convention (up axis, side axis); document constants.
+      PARTIAL: skinning is frame-agnostic (verts + joints share the Asset's frame), so the
+      posing gate passes without a rotation. The empirical up-axis constant (for upright
+      display in a Y-up viewer + the relabeler) still needs a real rigged asset — dump one
+      on the server and set the constant. Not blocking export correctness.
+- [x] `glb_io.py` export (`export_glb`): joint nodes + hierarchy, skin with
+      inverseBindMatrices, top-4 JOINTS_0/WEIGHTS_0 (`pack_top4`, group_per_vertex=4),
+      one-frame rest pose. Matches glb.cpp: translation-only joints, IBM = translate(-joint).
+- [x] Wire to the exporter: `infer.rig_glb_to_file` (glb in -> rigged skinned glb out).
+      (The vendored `tokenrig.py:predict_step` still lazily imports BpyParser only for its
+      own file-export convenience path, which we don't call — our pipeline uses `export_glb`.)
+- [x] **Gate C** (export correctness — incl. the POSING gate) — LOCAL half PASSES
+      (`tests/test_glb_export.py`): skin structure, bind-pose identity (world@IBM==I), weight
+      sanity (>=0, sum==1, valid indices), `pack_top4` selection/normalization, and the
+      POSING GATE via a numpy reference LBS (rest reproduces verts; rotating a bone deforms
+      upper verts locally at fixed pivot radius while lower stay put; no collapse/explosion).
+      Server round-trip wired (`test_rig_glb_to_file_roundtrip`). Still TODO: parity vs
+      upstream Blender export (golden fixture) and the real Kimodo animation round-trip (E).
 
 ## Phase 4 — Relabeler (pure Python)
 - [ ] `relabel.py`: topology-driven recognizer per `04`/`08` (descendant-count based;

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import trimesh
@@ -30,6 +30,16 @@ from .vendor.rig_package.info.asset import Asset
 
 PathLike = Union[str, Path]
 SUPPORTED_EXT = {".glb", ".gltf", ".obj", ".ply", ".stl"}
+
+# glTF component types
+_FLOAT = 5126
+_UNSIGNED_SHORT = 5123
+_UNSIGNED_INT = 5125
+# glTF bufferView targets
+_ARRAY_BUFFER = 34962
+_ELEMENT_ARRAY_BUFFER = 34963
+
+GROUP_PER_VERTEX = 4  # glTF max influences per vertex (upstream group_per_vertex=4)
 
 
 @dataclass
@@ -145,3 +155,185 @@ def load_asset(path: PathLike, cls: str = "articulation") -> Asset:
         cls=cls,
         path=str(path),
     )
+
+
+# ---------------------------------------------------------------------------
+# Export (Phase 3) — the critical correctness path. See spec/03 and the
+# authoritative reference skin-tokens.cpp/src/glb.cpp (save_skinned_animation_glb_file)
+# and binding.cpp (top-4 packing). Convention: joints are plain points with
+# IDENTITY rotation; node local translation = joint - parent_joint; the inverse
+# bind matrix is a pure translate(-joint_world). Thus world @ IBM == identity at
+# bind, and the mesh deforms correctly when a bone is posed.
+# ---------------------------------------------------------------------------
+
+
+def pack_top4(dense_skin: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Reduce dense per-vertex weights (N, J) to top-4 influences per vertex.
+
+    Matches binding.cpp: for each vertex, keep the 4 largest weights (tie-break
+    by lower joint index), pad with joint 0 / weight 0 if fewer are non-zero,
+    force weight[0]=1 if all zero, then normalize the 4 to sum to 1.0.
+
+    Returns ``(joints, weights)`` with shapes (N, 4): joints uint16, weights float32.
+    """
+    dense = np.asarray(dense_skin, dtype=np.float64)
+    if dense.ndim != 2:
+        raise ValueError(f"dense_skin must be (N, J), got {dense.shape}")
+    n, j = dense.shape
+    k = min(GROUP_PER_VERTEX, j)
+
+    # Rank by (-weight, joint_index) so ties prefer the lower joint index.
+    # argsort is ascending; sort on weight descending via negation, stable so the
+    # existing (ascending) joint order breaks ties toward lower indices.
+    order = np.argsort(-dense, axis=1, kind="stable")[:, :k]  # (N, k)
+    top_j = order.astype(np.int64)
+    top_w = np.take_along_axis(dense, order, axis=1)  # (N, k)
+    top_w = np.clip(top_w, 0.0, None)
+
+    joints = np.zeros((n, GROUP_PER_VERTEX), dtype=np.uint16)
+    weights = np.zeros((n, GROUP_PER_VERTEX), dtype=np.float64)
+    joints[:, :k] = top_j.astype(np.uint16)
+    weights[:, :k] = top_w
+
+    sums = weights.sum(axis=1)
+    empty = sums <= 1e-12
+    # Vertices with no positive influence: assign fully to joint 0.
+    joints[empty, 0] = 0
+    weights[empty, :] = 0.0
+    weights[empty, 0] = 1.0
+    sums = weights.sum(axis=1)
+    weights = weights / sums[:, None]
+
+    return joints, weights.astype(np.float32)
+
+
+def _accessor(
+    gltf, blob: bytearray, array: np.ndarray, component_type: int, type_str: str,
+    target: Optional[int] = None, with_minmax: bool = False,
+):
+    """Append ``array`` to the binary blob and register a bufferView + accessor.
+
+    Returns the new accessor index. ``array`` must already be the right dtype
+    (float32 / uint16 / uint32) and shape ((count,) or (count, comps)).
+    """
+    from pygltflib import Accessor, BufferView
+
+    data = np.ascontiguousarray(array).tobytes()
+    byte_offset = len(blob)
+    blob.extend(data)
+    while len(blob) % 4 != 0:  # 4-byte align the next view
+        blob.append(0)
+
+    bv = BufferView(buffer=0, byteOffset=byte_offset, byteLength=len(data))
+    if target is not None:
+        bv.target = target
+    gltf.bufferViews.append(bv)
+    bv_index = len(gltf.bufferViews) - 1
+
+    count = array.shape[0]
+    acc = Accessor(
+        bufferView=bv_index,
+        componentType=component_type,
+        count=count,
+        type=type_str,
+    )
+    if with_minmax:
+        acc.min = array.min(axis=0).tolist()
+        acc.max = array.max(axis=0).tolist()
+    gltf.accessors.append(acc)
+    return len(gltf.accessors) - 1
+
+
+def export_glb(asset: Asset, path: PathLike) -> None:
+    """Export a rigged ``Asset`` to a skinned glb (one-frame rest pose).
+
+    Requires ``asset`` to have vertices, faces, joints, parents, and dense
+    ``skin`` (N, J). Vertex normals are computed if absent. Follows glb.cpp:
+    translation-only joint nodes, translate(-joint) inverse bind matrices, top-4
+    JOINTS_0/WEIGHTS_0. The file opens in any glTF viewer as a static skinned
+    mesh and deforms correctly when bones are posed.
+    """
+    from pygltflib import (
+        GLTF2, Attributes, Buffer, Mesh, Node, Primitive, Scene, Skin,
+    )
+
+    if asset.vertices is None or asset.faces is None:
+        raise ValueError("asset needs vertices and faces")
+    if asset.joints is None or asset.parents is None:
+        raise ValueError("asset needs joints and parents (rig it first)")
+    if asset.skin is None:
+        raise ValueError("asset needs dense skin weights")
+
+    vertices = np.asarray(asset.vertices, dtype=np.float32)
+    faces = np.asarray(asset.faces, dtype=np.uint32)
+    joints_xyz = np.asarray(asset.joints, dtype=np.float32)
+    parents = np.asarray(asset.parents, dtype=np.int64)
+    J = joints_xyz.shape[0]
+
+    if asset.vertex_normals is not None:
+        normals = np.asarray(asset.vertex_normals, dtype=np.float32)
+    else:
+        mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, maintain_order=True)
+        normals = np.asarray(mesh.vertex_normals, dtype=np.float32)
+
+    joint_names = asset.joint_names or [f"bone_{i}" for i in range(J)]
+
+    joints_0, weights_0 = pack_top4(asset.skin)
+    if joints_0.shape[0] != vertices.shape[0]:
+        raise ValueError(
+            f"skin rows ({joints_0.shape[0]}) != vertex count ({vertices.shape[0]})"
+        )
+
+    # Inverse bind matrices: pure translate(-joint_world), column-major flat 16.
+    ibm = np.tile(np.eye(4, dtype=np.float32).flatten(), (J, 1))  # (J, 16)
+    ibm[:, 12] = -joints_xyz[:, 0]
+    ibm[:, 13] = -joints_xyz[:, 1]
+    ibm[:, 14] = -joints_xyz[:, 2]
+
+    gltf = GLTF2()
+    gltf.asset.generator = "ComfyUI-SkinTokens-NoBlender"
+    blob = bytearray()
+
+    a_pos = _accessor(gltf, blob, vertices, _FLOAT, "VEC3", _ARRAY_BUFFER, with_minmax=True)
+    a_nrm = _accessor(gltf, blob, normals, _FLOAT, "VEC3", _ARRAY_BUFFER)
+    a_jnt = _accessor(gltf, blob, joints_0, _UNSIGNED_SHORT, "VEC4", _ARRAY_BUFFER)
+    a_wgt = _accessor(gltf, blob, weights_0, _FLOAT, "VEC4", _ARRAY_BUFFER)
+    a_idx = _accessor(gltf, blob, faces.reshape(-1), _UNSIGNED_INT, "SCALAR", _ELEMENT_ARRAY_BUFFER)
+    a_ibm = _accessor(gltf, blob, ibm, _FLOAT, "MAT4")
+
+    # Joint nodes: local translation = joint - parent_joint (absolute for root).
+    for i in range(J):
+        p = int(parents[i])
+        local = joints_xyz[i] - joints_xyz[p] if p >= 0 else joints_xyz[i]
+        children = [c for c in range(J) if int(parents[c]) == i]
+        node = Node(name=str(joint_names[i]), translation=local.tolist())
+        if children:
+            node.children = children
+        gltf.nodes.append(node)
+
+    # Mesh node (references the skin + mesh).
+    mesh_node_index = len(gltf.nodes)
+    gltf.nodes.append(Node(name="SkinnedMesh", mesh=0, skin=0))
+
+    gltf.meshes.append(Mesh(primitives=[Primitive(
+        attributes=Attributes(POSITION=a_pos, NORMAL=a_nrm, JOINTS_0=a_jnt, WEIGHTS_0=a_wgt),
+        indices=a_idx,
+        mode=4,  # TRIANGLES
+    )]))
+
+    root_joint = next((i for i in range(J) if int(parents[i]) == -1), 0)
+    gltf.skins.append(Skin(
+        inverseBindMatrices=a_ibm,
+        skeleton=root_joint,
+        joints=list(range(J)),
+    ))
+
+    gltf.scenes.append(Scene(nodes=[root_joint, mesh_node_index]))
+    gltf.scene = 0
+
+    while len(blob) % 4 != 0:
+        blob.append(0)
+    gltf.buffers.append(Buffer(byteLength=len(blob)))
+    gltf.set_binary_blob(bytes(blob))
+
+    gltf.save_binary(str(path))

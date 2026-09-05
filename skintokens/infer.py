@@ -131,6 +131,26 @@ def rig_glb(
     return rig_asset(bundle, asset, generate_kwargs=generate_kwargs)
 
 
+def rig_glb_to_file(
+    bundle: SkinTokensModel,
+    in_path,
+    out_path,
+    cls: str = "articulation",
+    generate_kwargs: Optional[dict] = None,
+) -> Asset:
+    """Full pipeline: glb in -> rigged skinned glb out. Returns the rigged Asset.
+
+    Import (Phase 2) + inference (Phase 1) + skinned export (Phase 3). Texture/
+    material transfer onto the original glb is Phase 6; this writes the rigged
+    mesh with a default material.
+    """
+    from .glb_io import export_glb
+
+    rigged = rig_glb(bundle, in_path, cls=cls, generate_kwargs=generate_kwargs)
+    export_glb(rigged, out_path)
+    return rigged
+
+
 def rig_asset(
     bundle: SkinTokensModel,
     asset: Asset,
