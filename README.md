@@ -112,6 +112,27 @@ Tests marked `server` need the GPU + full weights and are skipped locally; see
 `scripts/server/`. The build is spec-driven - see [`spec/`](spec/) for the design
 and [`spec/TODO.md`](spec/TODO.md) for the phased task list and validation gates.
 
+## Releasing (Comfy Registry)
+
+Publishing is automated. A GitHub Action
+([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) publishes to
+[registry.comfy.org](https://registry.comfy.org) on any push to `main` that
+changes `pyproject.toml`. ComfyUI Manager then picks the new version up from the
+registry on its own sync cadence.
+
+To cut a release:
+
+1. Bump `version` in `pyproject.toml` (e.g. `0.0.1` -> `0.0.2`). **This is the
+   trigger** - the registry rejects re-publishing an existing version, so nothing
+   publishes until the number changes.
+2. Update the description (`[project] description`, the one-line text shown in
+   Manager) and/or `README.md` (the registry page body) if needed.
+3. Commit and push to `main`. Watch the run under the repo's **Actions** tab.
+
+The registry API key lives only as the `REGISTRY_ACCESS_TOKEN` repo secret (never
+in the repo). Rotate it on registry.comfy.org, then
+`gh secret set REGISTRY_ACCESS_TOKEN` - nothing in the workflow changes.
+
 ## Credits
 
 - [VAST-AI/SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) - the model and
