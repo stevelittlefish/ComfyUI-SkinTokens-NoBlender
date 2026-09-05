@@ -11,6 +11,7 @@ SKINTOKENS_RUN_MODEL is set.
 """
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -21,6 +22,10 @@ from skintokens import infer
 from skintokens.model_loader import SkinTokensModel
 from skintokens.vendor.data.sampler import SamplerMix
 from skintokens.vendor.data.transform import Transform
+
+
+# Committed sample mesh for the GPU tests (see tests/fixtures/meshes/README.md).
+SAMPLE_MESH = Path(__file__).parent / "fixtures" / "meshes" / "dummy.glb"
 
 
 def _box():
@@ -147,15 +152,10 @@ def test_rig_mesh_end_to_end():
 )
 def test_rig_glb_end_to_end():
     # Rig a real glb via the pure-Python importer (Phase 2) + inference.
-    from pathlib import Path
-
     from skintokens import glb_io
     from skintokens.model_loader import load_model
 
-    glb = Path("references/SkinTokens/examples/giraffe.glb")
-    if not glb.exists():
-        pytest.skip("run references/pull.sh to fetch the sample glb")
-
+    glb = SAMPLE_MESH
     n_verts = glb_io.load_mesh(glb).vertices.shape[0]
     models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
     bundle = load_model(
@@ -173,22 +173,17 @@ def test_rig_glb_end_to_end():
 )
 def test_rig_glb_to_file_roundtrip(tmp_path):
     # Full pipeline on a real mesh: glb in -> skinned glb out, re-importable.
-    from pathlib import Path
-
     import trimesh
     from pygltflib import GLTF2
 
     from skintokens.model_loader import load_model
 
-    glb = Path("references/SkinTokens/examples/giraffe.glb")
-    if not glb.exists():
-        pytest.skip("run references/pull.sh to fetch the sample glb")
-
+    glb = SAMPLE_MESH
     models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
     bundle = load_model(
         device=os.environ.get("SKINTOKENS_DEVICE", "cuda"), models_dir=models_dir
     )
-    out = tmp_path / "giraffe_rigged.glb"
+    out = tmp_path / "rigged.glb"
     rigged = infer.rig_glb_to_file(bundle, glb, out)
 
     assert out.exists()

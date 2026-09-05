@@ -248,9 +248,7 @@ def test_rig_node_end_to_end(tmp_path, monkeypatch):
     from skintokens.comfy_model import SkinTokensModelWrapper
     from skintokens.model_loader import load_model
 
-    glb = Path("references/SkinTokens/examples/giraffe.glb")
-    if not glb.exists():
-        pytest.skip("run references/pull.sh to fetch the sample glb")
+    glb = Path(__file__).parent / "fixtures" / "meshes" / "dummy.glb"
 
     models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
     bundle = load_model(
@@ -270,9 +268,9 @@ def test_rig_node_end_to_end(tmp_path, monkeypatch):
     prim = g.meshes[0].primitives[0]
     assert prim.attributes.JOINTS_0 is not None
     assert prim.attributes.WEIGHTS_0 is not None
-    # relabel=True must not crash on a non-humanoid; core names appear only for
-    # humanoids, so just assert the run completed and joint nodes are named.
-    assert all(g.nodes[j].name for j in g.skins[0].joints)
+    # dummy.glb is a humanoid -> the relabeler should have named the core bones.
+    names = {g.nodes[j].name for j in g.skins[0].joints}
+    assert any(str(n).startswith("mixamorig:") for n in names), names
 
 
 # --- VRAM wrapper (no-ComfyUI fallback + size estimator) --------------------

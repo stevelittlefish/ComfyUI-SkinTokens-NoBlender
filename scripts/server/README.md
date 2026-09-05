@@ -74,16 +74,17 @@ huggingface-cli login          # or: export HF_TOKEN=hf_xxx
 
 - `test_rig_mesh_end_to_end` (test_infer.py) — rigs a synthetic box; asserts a
   skeleton (`parents`, `J > 0`) + per-vertex skin weights come back. Gate B smoke.
-- `test_rig_glb_end_to_end` (test_infer.py) — rigs the real `giraffe.glb` via the
-  pure-Python importer + inference.
+- `test_rig_glb_end_to_end` (test_infer.py) — rigs the committed sample mesh via
+  the pure-Python importer + inference.
 - `test_rig_glb_to_file_roundtrip` (test_infer.py) — full engine pipeline: glb in
   -> skinned glb out, re-importable, with JOINTS_0/WEIGHTS_0. Gate C server half.
 - `test_rig_node_end_to_end` (test_nodes.py) — the **Phase 5 ComfyUI node glue**:
   `SkinTokensRig` with a File3D input -> rigged `FILE_3D_GLB`, exercising the
   MESH/File3D bridge + relabel + export around real inference (no ComfyUI needed).
+  The sample is humanoid, so it also checks the relabeler emits `mixamorig:*`.
 
-The `giraffe.glb`-based tests skip if `references/SkinTokens/` isn't present — run
-`references/pull.sh` on the host first to fetch it.
+These use the committed sample mesh (`tests/fixtures/meshes/dummy.glb`), so there
+is nothing to download first — no `references/pull.sh` needed.
 
 ### What this does NOT cover
 
