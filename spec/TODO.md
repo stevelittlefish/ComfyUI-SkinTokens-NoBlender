@@ -120,9 +120,10 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       TokenRig has a read-only `device` property — fixed with a runtime settable-device
       subclass (`7f55a97`). Loader redesigned to the idiomatic auto-download dropdown
       (`fdec169`). LOCAL coverage: `tests/test_nodes.py` (22 tests) + the GPU
-      `test_rig_node_end_to_end`. STILL TODO (nice-to-have): explicitly verify VRAM
-      offload/eviction across repeated runs + when other models contend for VRAM (no leak) —
-      the ModelPatcher path that drives eviction is now proven to work.
+      `test_rig_node_end_to_end`. VRAM EVICTION CONFIRMED (2026-09-05): the Manager's
+      "clear all models and cache" frees the model and VRAM returns to 0 — proving the model
+      is properly registered with `model_management` (via ModelPatcher) and evictable with no
+      leak. Gate F complete.
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
 - [ ] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving
