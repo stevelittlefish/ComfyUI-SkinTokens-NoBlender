@@ -161,6 +161,16 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       ComfyUI) and Gate C server round-trip (real glb -> rigged skinned glb, re-importable with
       JOINTS_0/WEIGHTS_0) both pass. Remaining = load a rigged output into Kimodo and confirm it
       animates; run when we have Kimodo/ai.lemon.com access.
+      **ROOT CAUSE FOUND (2026-09-05):** Kimodo animates our rigs but the arms "flap". Diagnosed
+      to a rest-pose mismatch in Kimodo's retarget (`ComfyUI-Kimodo-Enhanced/kimodo_retarget_fbx.py`
+      `retarget_animation`, line ~511): it corrects source->target using rest *rotations* only.
+      SOMA motion is authored for a T-pose (identity rest rotations); our exported rigs also have
+      identity bind rotations (translation-only joint nodes, per spec/03) BUT are geometrically
+      **A-posed** (arms ~65 deg below horizontal). The retarget never looks at bone *direction*, so
+      it applies T-pose motion to A-posed arms uncorrected -> flapping. Legs (~85 deg, ~matching
+      SOMA's straight-down legs) look fine. **Confirmed:** a T-pose input mesh animates cleanly.
+      Fix is Kimodo-side (make the retarget rest-direction aware), NOT this pack. Interim
+      workaround: feed T-pose meshes.
 - [x] `examples/`: sample workflow `examples/skintokens_rig.json`
       (Load3D -> SkinTokens Rig -> Preview3DAdvanced, + SkinTokens Loader), kept in sync with the
       node contract and guarded by `tests/test_examples.py` (nodes are registered/core; Rig
