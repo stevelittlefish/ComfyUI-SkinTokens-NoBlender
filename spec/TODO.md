@@ -28,11 +28,13 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
 - [x] Temporary harness: `tests/test_infer.py` (CPU) covers `build_asset`, the sampler
       transform, and input guards. Full run is `test_rig_mesh_end_to_end` (`server` marker).
 - [~] **Gate B** (inference parity vs upstream demo.py). Smoke test PASSES on the server
-      (`test_rig_mesh_end_to_end` via `scripts/server/run-server-tests.sh`): model loads and
-      `predict_step` returns a rigged Asset (skeleton + skin weights). Confirms the
-      `predict_transform` config, `cls="articulation"`, and batch assembly are correct.
-      Still TODO for full parity: compare joints/parents/weights against upstream `demo.py`
-      on the same mesh (needs a shared input + upstream run on the server).
+      (`test_rig_mesh_end_to_end` + `test_rig_glb_end_to_end` via
+      `scripts/server/run-server-tests.sh`, all 4 server tests green 2026-09-05): model loads
+      and `predict_step` returns a rigged Asset (skeleton + skin weights) on both a synthetic
+      box and a real humanoid glb. Confirms the `predict_transform` config,
+      `cls="articulation"`, and batch assembly are correct. Still TODO for full parity:
+      compare joints/parents/weights against upstream `demo.py` on the same mesh (needs a
+      shared input + upstream run on the server).
 
 ## Phase 2 — glb import (pure Python)
 - [x] `glb_io.py` import: trimesh → verts/faces/normals/mesh_names + vertex_bias/face_bias,
@@ -64,8 +66,10 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       sanity (>=0, sum==1, valid indices), `pack_top4` selection/normalization, and the
       POSING GATE via a numpy reference LBS (rest reproduces verts; rotating a bone deforms
       upper verts locally at fixed pivot radius while lower stay put; no collapse/explosion).
-      Server round-trip wired (`test_rig_glb_to_file_roundtrip`). Still TODO: parity vs
-      upstream Blender export (golden fixture) and the real Kimodo animation round-trip (E).
+      Server round-trip PASSES (`test_rig_glb_to_file_roundtrip`, 2026-09-05): real glb ->
+      rigged skinned glb out, re-importable with JOINTS_0/WEIGHTS_0 and J joints. Still TODO:
+      parity vs upstream Blender export (golden fixture) and the real Kimodo animation
+      round-trip (E).
 
 ## Phase 4 — Relabeler (pure Python)
 - [x] `relabel.py`: topology-driven recognizer per `04`/`08` (descendant-count based;
@@ -106,13 +110,16 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       `SkinTokensModelWrapper.prepare()` (ComfyUI drives eviction; never hardcodes cuda:0).
       Falls back to a passthrough wrapper when `comfy` is absent (local dev). Size estimator +
       no-comfy fallback unit-tested.
-- [~] **Gate F** (ComfyUI integration + VRAM eviction, no leak) — LOCAL half done:
+- [~] **Gate F** (ComfyUI integration + VRAM eviction, no leak). LOCAL half done:
       registration/INPUT_TYPES contract, the pure-Python `relabel_glb` path (via
       `SkinTokensRelabel`, tested on rigged glbs built from the Gate-D skeleton fixtures,
-      incl. joint-index stability), and the VRAM wrapper's fallback/size estimator
-      the native-type bridge conversions (`tests/test_nodes.py`, 19 tests). Server TODO:
-      real load-on-demand + eviction + no-leak
-      against the pinned ComfyUI's `model_management` API (validate the ModelPatcher contract).
+      incl. joint-index stability), the VRAM wrapper's fallback/size estimator, and the
+      native-type bridge conversions (`tests/test_nodes.py`, 19 tests). SERVER: the node
+      pipeline itself PASSES on the GPU (`test_rig_node_end_to_end`, 2026-09-05) — File3D in
+      -> rigged FILE_3D_GLB, MESH/File3D bridge + relabel(mixamorig:*) + export around real
+      inference. Still TODO (needs ComfyUI running, not just the GPU): real load-on-demand +
+      offload + eviction with no leak against the pinned ComfyUI's `model_management` API
+      (validate the ModelPatcher contract).
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
 - [ ] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving
