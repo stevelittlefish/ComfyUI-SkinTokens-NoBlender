@@ -87,12 +87,26 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       extracted from the rigged .glb, no mesh; ~6 KB total).
 
 ## Phase 5 — ComfyUI nodes
-- [ ] `nodes.py`: `SkinTokensLoader`, `SkinTokensRig` (relabel + params toggles), optional
-      `SkinTokensRelabel`. `__init__.py` registration.
-- [ ] Decide the mesh I/O socket type (default: STRING filepaths — confirm with user).
-- [ ] Wrap the model for `comfy.model_management` (ModelPatcher or version-idiomatic
-      equivalent); use `get_torch_device()`; verify load-on-demand + eviction.
-- [ ] **Gate F** (ComfyUI integration + VRAM eviction, no leak).
+- [x] `nodes.py`: `SkinTokensLoader`, `SkinTokensRig` (relabel + generation params toggles),
+      `SkinTokensRelabel` (standalone, model-free). `__init__.py` registration (relative
+      import with an absolute fallback so pytest can import it without package context).
+      `comfy.*`/`torch`/`folder_paths` imported lazily inside methods, so importing the pack
+      (what ComfyUI does at startup to read NODE_CLASS_MAPPINGS) needs no GPU/model.
+- [x] Mesh I/O socket type = **STRING filepaths** (spec/05 safe default for the automation
+      use case; resolves relative paths via `folder_paths` input/output dirs). A custom MESH
+      socket can be added later if graph-native chaining is wanted — CONFIRM with user.
+- [x] Wrap the model for `comfy.model_management` (`skintokens/comfy_model.py`): a
+      `ModelPatcher` over the nn.Module with `get_torch_device()`/`unet_offload_device()`,
+      loaded to CPU by the Loader and moved to GPU on demand via `load_models_gpu` in
+      `SkinTokensModelWrapper.prepare()` (ComfyUI drives eviction; never hardcodes cuda:0).
+      Falls back to a passthrough wrapper when `comfy` is absent (local dev). Size estimator +
+      no-comfy fallback unit-tested.
+- [~] **Gate F** (ComfyUI integration + VRAM eviction, no leak) — LOCAL half done:
+      registration/INPUT_TYPES contract, the pure-Python `relabel_glb` path (via
+      `SkinTokensRelabel`, tested on rigged glbs built from the Gate-D skeleton fixtures,
+      incl. joint-index stability), and the VRAM wrapper's fallback/size estimator
+      (`tests/test_nodes.py`, 14 tests). Server TODO: real load-on-demand + eviction + no-leak
+      against the pinned ComfyUI's `model_management` API (validate the ModelPatcher contract).
 
 ## Phase 6 — Texture transfer & extras (phase 2 features)
 - [ ] `transfer.py`: `use_transfer` — attach generated rig to the ORIGINAL glb preserving

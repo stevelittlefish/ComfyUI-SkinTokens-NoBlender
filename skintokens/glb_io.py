@@ -244,6 +244,91 @@ def _accessor(
     return len(gltf.accessors) - 1
 
 
+def _skeleton_from_gltf(g) -> Tuple[np.ndarray, np.ndarray, List[int]]:
+    """Extract (joints_world, parents, joint_node_indices) from a skinned glTF.
+
+    ``joints_world`` is (J, 3) rest-pose world positions of each joint (in glTF
+    joint order), ``parents`` is (J,) with -1 for the skeleton root, and
+    ``joint_node_indices`` maps joint index -> glTF node index (for renaming).
+    Uses the first skin. Node transforms are composed down the hierarchy.
+    """
+    if not g.skins:
+        raise ValueError("glTF has no skin (not a rigged mesh)")
+    joint_nodes = list(g.skins[0].joints)
+
+    parent_of = {}
+    for i, node in enumerate(g.nodes):
+        for c in (node.children or []):
+            parent_of[c] = i
+
+    def local_matrix(node) -> np.ndarray:
+        if node.matrix:
+            # glTF matrices are column-major; reshape+T to row-major.
+            return np.array(node.matrix, dtype=np.float64).reshape(4, 4).T
+        m = np.eye(4, dtype=np.float64)
+        if node.rotation:
+            x, y, z, w = node.rotation
+            m[:3, :3] = [
+                [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+            ]
+        m[:3, 3] = node.translation or [0.0, 0.0, 0.0]
+        return m
+
+    _cache = {}
+
+    def world_matrix(i: int) -> np.ndarray:
+        if i in _cache:
+            return _cache[i]
+        m = local_matrix(g.nodes[i])
+        if i in parent_of:
+            m = world_matrix(parent_of[i]) @ m
+        _cache[i] = m
+        return m
+
+    idx = {n: k for k, n in enumerate(joint_nodes)}
+    J = len(joint_nodes)
+    joints = np.zeros((J, 3), dtype=np.float64)
+    parents = np.full(J, -1, dtype=np.int64)
+    for k, n in enumerate(joint_nodes):
+        joints[k] = world_matrix(n)[:3, 3]
+        pn = parent_of.get(n)
+        parents[k] = idx.get(pn, -1) if pn is not None else -1
+    return joints, parents, joint_nodes
+
+
+def relabel_glb(
+    in_path: PathLike,
+    out_path: PathLike,
+    convention: str = "mixamo",
+    with_fingers: bool = True,
+) -> dict:
+    """Rename the humanoid joint nodes of a rigged glb in place; write to out_path.
+
+    Loads the skinned glb, recognizes the humanoid core from its skeleton
+    (:func:`relabel.label_humanoid`), renames only the matched joint *node names*
+    (indices/geometry/skin untouched — JOINTS_0 references joints by index, so the
+    skin stays attached), and saves. Returns ``{node_index: new_name}``.
+    """
+    from pygltflib import GLTF2
+
+    from .relabel import label_humanoid
+
+    g = GLTF2().load_binary(str(in_path))
+    joints, parents, joint_nodes = _skeleton_from_gltf(g)
+    mapping = label_humanoid(joints, parents, convention=convention, with_fingers=with_fingers)
+
+    applied = {}
+    for joint_index, name in mapping.items():
+        node_index = joint_nodes[joint_index]
+        g.nodes[node_index].name = name
+        applied[node_index] = name
+
+    g.save_binary(str(out_path))
+    return applied
+
+
 def export_glb(asset: Asset, path: PathLike) -> None:
     """Export a rigged ``Asset`` to a skinned glb (one-frame rest pose).
 
