@@ -22,3 +22,6 @@ Icon = ""
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "server: tests that need the GPU + full model weights (run on the server; see scripts/server/)",
+]

@@ -91,6 +91,7 @@ def test_rig_mesh_rejects_use_skeleton():
         infer.rig_mesh(_cpu_bundle(transform), verts, faces, use_skeleton=True)
 
 
+@pytest.mark.server
 @pytest.mark.skipif(
     not os.environ.get("SKINTOKENS_RUN_MODEL"),
     reason="needs the ~14 GB model + GPU (Gate B, server-side)",
