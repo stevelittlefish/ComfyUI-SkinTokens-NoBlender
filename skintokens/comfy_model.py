@@ -21,6 +21,38 @@ if TYPE_CHECKING:  # avoid importing torch (via model_loader) at module import t
     from .model_loader import SkinTokensModel
 
 
+def _ensure_settable_device(model):
+    """Make ``model.device`` assignable for ComfyUI's ModelPatcher.
+
+    ComfyUI's ``ModelPatcher.load()`` does ``self.model.device = device`` directly.
+    A Lightning ``TokenRig`` exposes ``device`` as a **read-only property**, so that
+    assignment raises ``AttributeError: property 'device' ... has no setter``. We
+    give just this instance a settable ``device`` by swapping in a runtime subclass
+    that overrides the property with a getter+setter (backed by an instance slot,
+    falling back to the parameters' device). No vendored files are touched, and
+    ``isinstance(model, TokenRig)`` still holds (it's a subclass).
+    """
+    cls = type(model)
+    dev = getattr(cls, "device", None)
+    if isinstance(dev, property) and dev.fset is None:
+        def _get(self):
+            d = self.__dict__.get("_comfy_device")
+            if d is not None:
+                return d
+            try:
+                return next(self.parameters()).device
+            except StopIteration:
+                return None
+
+        def _set(self, value):
+            self.__dict__["_comfy_device"] = value
+
+        model.__class__ = type(
+            cls.__name__ + "_ComfyPatchable", (cls,), {"device": property(_get, _set)}
+        )
+    return model
+
+
 def estimate_model_size(model) -> int:
     """Approximate VRAM footprint of an nn.Module in bytes.
 
@@ -95,6 +127,7 @@ def wrap_for_comfy(bundle: SkinTokensModel) -> SkinTokensModelWrapper:
     load_device = mm.get_torch_device()
     offload_device = mm.unet_offload_device()
 
+    _ensure_settable_device(bundle.model)  # ModelPatcher assigns model.device directly
     patcher = ModelPatcher(
         bundle.model,
         load_device=load_device,

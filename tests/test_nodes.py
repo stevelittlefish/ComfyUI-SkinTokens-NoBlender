@@ -302,6 +302,39 @@ def test_wrap_for_comfy_without_comfy_returns_passthrough():
     assert w.prepare() is not None  # no-op path returns the bundle
 
 
+def test_ensure_settable_device_adds_setter():
+    """A read-only `device` property (like Lightning's) becomes assignable."""
+    from skintokens.comfy_model import _ensure_settable_device
+
+    class ReadOnlyDevice:
+        @property
+        def device(self):
+            return "cpu"  # no setter -> assignment would raise
+
+    obj = ReadOnlyDevice()
+    with pytest.raises(AttributeError):
+        obj.device = "cuda:0"
+
+    _ensure_settable_device(obj)
+    obj.device = "cuda:0"  # ModelPatcher does exactly this
+    assert obj.device == "cuda:0"
+    assert isinstance(obj, ReadOnlyDevice)  # still a subclass
+
+
+def test_ensure_settable_device_leaves_normal_attr_alone():
+    from skintokens.comfy_model import _ensure_settable_device
+
+    class PlainDevice:
+        device = "cpu"  # ordinary attribute, already settable
+
+    obj = PlainDevice()
+    cls_before = type(obj)
+    _ensure_settable_device(obj)
+    assert type(obj) is cls_before  # untouched
+    obj.device = "cuda:0"
+    assert obj.device == "cuda:0"
+
+
 def test_estimate_model_size():
     from skintokens.comfy_model import estimate_model_size
 
