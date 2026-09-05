@@ -1,76 +1,68 @@
 #!/usr/bin/env bash
 #
-# Run the tests that need the GPU + full model weights (the "server" marker).
+# Run the tests that need a GPU + the full model weights (the "server" marker).
 #
-# Everything else in this project is tested on a laptop with no GPU. This script
-# is for the bits that can only run on the GPU box (currently: the end-to-end
-# inference smoke test). It is idempotent — safe to run repeatedly.
+# These tests do NOT need ComfyUI. They need a GPU and a CUDA-enabled torch.
+# This runs directly on the host using uv: it creates an isolated venv, installs
+# a CUDA torch wheel + the runtime deps, checks the GPU is visible, and runs the
+# server tests. Nothing global is touched; ComfyUI's container is not involved.
 #
-# Quick start (from anywhere on the server):
+# Quick start (from the repo checkout on the GPU host):
 #
-#   PYTHON=/path/to/comfyui/python ./scripts/server/run-server-tests.sh
+#   ./scripts/server/run-server-tests.sh
 #
-# See scripts/server/README.md for details and configuration.
+# Idempotent — safe to run repeatedly. See scripts/server/README.md.
 #
 set -euo pipefail
 
-# --- resolve repo root (this script lives in scripts/server/) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 # --- configuration (override via environment) ---
-# PYTHON: the interpreter to base the venv on. Point this at ComfyUI's Python so
-#         the venv inherits its CUDA-enabled torch (and flash-attn, if present).
-PYTHON="${PYTHON:-python3}"
-# VENV: where to create the server venv (kept separate from the laptop .venv).
 VENV="${VENV:-$REPO_ROOT/.venv-server}"
-# SKINTOKENS_DEVICE: torch device to run inference on.
 export SKINTOKENS_DEVICE="${SKINTOKENS_DEVICE:-cuda}"
-# SKINTOKENS_MODELS_DIR: where to cache the ~14 GB weights (optional).
-#   If set, it is passed through; load_model() defaults to ./models otherwise.
+# TORCH_BACKEND: uv auto-detects the CUDA build from the driver by default.
+# Override if detection is wrong, e.g. TORCH_BACKEND=cu124 (or cpu to force CPU).
+TORCH_BACKEND="${TORCH_BACKEND:-auto}"
 
 echo "==> repo:    $REPO_ROOT"
-echo "==> python:  $PYTHON  ($($PYTHON --version 2>&1))"
 echo "==> venv:    $VENV"
 echo "==> device:  $SKINTOKENS_DEVICE"
+echo "==> torch:   backend=$TORCH_BACKEND"
 
-# --- create the venv, inheriting the base interpreter's site-packages ---
-# --system-site-packages is what lets us reuse ComfyUI's torch/CUDA/flash-attn
-# instead of downloading a second multi-GB torch build.
+# --- venv (via uv) ---
 if [ ! -d "$VENV" ]; then
-  echo "==> creating venv (inheriting system site-packages)"
-  "$PYTHON" -m venv --system-site-packages "$VENV"
+  echo "==> creating venv"
+  uv venv "$VENV"
 fi
-# shellcheck disable=SC1091
-source "$VENV/bin/activate"
 
-# --- install deps into the venv (not into ComfyUI's env) ---
-# torch is intentionally NOT installed here: it must come from the base
-# interpreter (ComfyUI). We only add the SkinTokens runtime deps + pytest.
-echo "==> installing runtime deps + pytest (torch comes from the base env)"
-python -m pip install --quiet --upgrade pip
-python -m pip install --quiet -r requirements.txt pytest
-python -m pip install --quiet -e . --no-deps
+# --- deps: CUDA torch first, then runtime deps + pytest, then the package ---
+# uv --torch-backend picks the right CUDA wheel from the host driver.
+echo "==> installing CUDA torch + deps into $VENV"
+VIRTUAL_ENV="$VENV" uv pip install --python "$VENV/bin/python" \
+  torch --torch-backend="$TORCH_BACKEND"
+VIRTUAL_ENV="$VENV" uv pip install --python "$VENV/bin/python" \
+  -r requirements.txt pytest
+VIRTUAL_ENV="$VENV" uv pip install --python "$VENV/bin/python" -e . --no-deps
 
-# --- sanity check: torch must see CUDA, or the tests can't run ---
+# --- sanity check: torch must see the GPU ---
 echo "==> checking torch / CUDA"
-python - <<'PY'
+"$VENV/bin/python" - <<'PY'
 import sys
 try:
     import torch
 except Exception as e:
-    sys.exit(f"ERROR: torch is not importable in this env: {e}\n"
-             "Point PYTHON= at ComfyUI's interpreter so the venv inherits its torch.")
+    sys.exit(f"ERROR: torch not importable: {e}")
 print(f"    torch {torch.__version__}, cuda available: {torch.cuda.is_available()}")
 if not torch.cuda.is_available():
-    sys.exit("ERROR: torch cannot see a GPU. Base the venv on ComfyUI's Python "
-             "(PYTHON=/path/to/comfyui/python) or check your CUDA setup.")
+    sys.exit("ERROR: torch cannot see a GPU. Check the NVIDIA driver (nvidia-smi), "
+             "or set TORCH_BACKEND=cuXXX to match it.")
 print(f"    device: {torch.cuda.get_device_name(0)}")
 PY
 
 # --- run the server-only tests ---
 # SKINTOKENS_RUN_MODEL=1 un-skips them; -m server selects only those tests.
-# The first run downloads the weights (~14 GB) via huggingface_hub.
+# First run downloads the weights (~14 GB) via huggingface_hub into ./models/.
 echo "==> running server tests (first run downloads ~14 GB of weights)"
-SKINTOKENS_RUN_MODEL=1 python -m pytest -m server -v -s "$@"
+SKINTOKENS_RUN_MODEL=1 "$VENV/bin/python" -m pytest -m server -v -s "$@"

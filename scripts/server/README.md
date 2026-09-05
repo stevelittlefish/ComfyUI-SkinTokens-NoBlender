@@ -5,70 +5,56 @@ on the GPU box because they need the full SkinTokens model (~14 GB) on CUDA.
 Those are tagged with the `server` pytest marker. This directory has one script
 to run them.
 
-The GPU server is https://comfy.seaslug.ai/ (ComfyUI). These tests run in a
-shell on that machine, not through the ComfyUI web UI.
+**These tests do not need ComfyUI.** They only need a GPU and a CUDA-enabled
+`torch`. ComfyUI happens to run on the same box (in Docker), but it is not
+involved here — ComfyUI *integration* is a separate, later gate (Gate F).
 
 ## TL;DR
 
-From a checkout of this repo **on the server**:
+From a checkout of this repo **on the GPU host**:
 
 ```bash
-PYTHON=/path/to/comfyui/python ./scripts/server/run-server-tests.sh
+./scripts/server/run-server-tests.sh
 ```
 
-That's it. The script sets up an isolated environment, checks the GPU is
-visible, downloads the weights on first run, and runs the server tests.
+That's it. The script uses `uv` to build an isolated venv with a CUDA `torch`,
+checks the GPU is visible, downloads the weights on first run, and runs the
+server tests. Nothing global is touched; ComfyUI's container is left alone.
 
-## What `PYTHON` should be
+## Requirements on the host
 
-Point `PYTHON` at **ComfyUI's own Python interpreter**. The script builds its
-venv with `--system-site-packages`, so it reuses ComfyUI's CUDA-enabled `torch`
-(and `flash-attn`, if installed) instead of downloading a second multi-GB torch
-build. Only the extra SkinTokens deps (`transformers`, `trimesh`, …) and
-`pytest` get installed into the venv — ComfyUI's environment is left untouched.
+- `uv` and `python` (both already installed).
+- The NVIDIA driver — check with `nvidia-smi`. The CUDA `torch` wheel bundles its
+  own CUDA runtime, so only the driver needs to be on the host (the same driver
+  Docker's `--gpus` uses). No system CUDA toolkit required.
 
-To find ComfyUI's Python, on the server:
+## What it does (idempotent — re-run freely)
 
-```bash
-# examples — the real path depends on how ComfyUI was installed
-ls /opt/ComfyUI/venv/bin/python
-# or, if ComfyUI runs under conda/uv, use that env's python
-```
-
-If you omit `PYTHON`, it defaults to `python3`. That only works if that
-interpreter already has a CUDA `torch` — otherwise the script stops with a clear
-error telling you to set `PYTHON`.
-
-## What it does
-
-1. Creates `.venv-server/` (once), inheriting the base interpreter's packages.
-2. Installs `requirements.txt` + `pytest` + this package (editable) into it.
-   **`torch` is not installed here** — it comes from the base env.
-3. Verifies `torch` imports and `torch.cuda.is_available()` is true; prints the
-   GPU name.
-4. Runs `pytest -m server` with `SKINTOKENS_RUN_MODEL=1`. The first run
-   downloads the weights (~14 GB) via `huggingface_hub` into `./models/`.
-
-The script is **idempotent** — run it as often as you like. Setup steps are
-skipped when already done.
+1. Creates `.venv-server/` via `uv` (once).
+2. Installs a CUDA `torch` wheel (`uv` auto-detects the build from your driver),
+   then `requirements.txt` + `pytest`, then this package (editable).
+3. Verifies `torch` imports and `torch.cuda.is_available()`; prints the GPU name.
+4. Runs `pytest -m server` with `SKINTOKENS_RUN_MODEL=1`. The first run downloads
+   the weights (~14 GB) via `huggingface_hub` into `./models/`.
 
 ## Configuration (environment variables)
 
-| Variable                  | Default        | Meaning                                              |
-|---------------------------|----------------|------------------------------------------------------|
-| `PYTHON`                  | `python3`      | Interpreter to base the venv on (use ComfyUI's).     |
-| `VENV`                    | `.venv-server` | Where to create the server venv.                     |
-| `SKINTOKENS_DEVICE`       | `cuda`         | Torch device (e.g. `cuda:0`).                        |
-| `SKINTOKENS_MODELS_DIR`   | `./models`     | Where the weights are cached (via `load_model`).     |
+| Variable                | Default        | Meaning                                                        |
+|-------------------------|----------------|----------------------------------------------------------------|
+| `TORCH_BACKEND`         | `auto`         | CUDA wheel selection for `uv` (e.g. `cu124`; `cpu` to force CPU). |
+| `VENV`                  | `.venv-server` | Where to create the server venv.                               |
+| `SKINTOKENS_DEVICE`     | `cuda`         | Torch device (e.g. `cuda:0`).                                   |
+| `SKINTOKENS_MODELS_DIR` | `./models`     | Where the weights are cached (via `load_model`).               |
+
+If `uv`'s auto CUDA detection picks the wrong build, set `TORCH_BACKEND` to match
+your driver, e.g. `TORCH_BACKEND=cu124 ./scripts/server/run-server-tests.sh`.
 
 ## Extra pytest arguments
 
 Anything after the script name is passed straight to pytest:
 
 ```bash
-# run one specific test, extra-verbose
-PYTHON=/path/to/comfyui/python ./scripts/server/run-server-tests.sh \
-  tests/test_infer.py::test_rig_mesh_end_to_end -vv
+./scripts/server/run-server-tests.sh tests/test_infer.py::test_rig_mesh_end_to_end -vv
 ```
 
 ## HuggingFace access
