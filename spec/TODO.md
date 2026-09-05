@@ -119,11 +119,11 @@ laptop has no GPU. Keep this file updated as work lands (see CLAUDE.md).
       materials/textures/scale (ref: upstream `transfer_rigging`, glb.cpp material handling).
 - [ ] `use_postprocess` (voxel skin) toggle, opt-in only.
 - [ ] `use_skeleton` (skin-only against an existing armature): armature import in glb_io.
-- [ ] `SkinTokensPreview3D` node + `web/js/` three.js extension (`05`/`08`). **Bundle
-      three.js + GLTFLoader locally — no CDN.** Serve via `/view` + `folder_paths`.
-      NOTE (Phase 5 finding): core ComfyUI's `Preview3DAdvanced` already previews our
-      `FILE_3D_GLB` output and has a `showSkeleton` toggle — a custom preview node may be
-      redundant. Revisit whether this is still worth building.
+- [x] ~~`SkinTokensPreview3D` node + `web/js/` three.js extension~~ **SKIPPED** (decided
+      with user, Phase 5): core ComfyUI's `Preview3DAdvanced` already previews our
+      `FILE_3D_GLB` output and has a `showSkeleton` toggle, so a custom preview node is
+      redundant. Users wire Rig -> Preview3DAdvanced directly. Revisit only if a
+      rig-specific preview (bone picking, weight paint) is ever wanted.
 
 ## Phase 7 — End-to-end + packaging
 - [ ] **Gate E** (end-to-end through Kimodo on ai.lemon.com — the real acceptance test).

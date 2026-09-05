@@ -4,10 +4,12 @@ These cover the parts of the node pack that run without ComfyUI/torch/the model:
 node registration + INPUT_TYPES contract, the pure-Python ``relabel_glb`` path
 (via a rigged glb built from the committed skeleton fixtures), the standalone
 ``SkinTokensRelabel`` node, and the VRAM-wrapper's no-ComfyUI fallback + size
-estimator. The GPU paths (Loader/Rig) are exercised on the server (Gate F).
+estimator. The full Rig pipeline on the GPU is a ``server``-marked test here
+(``test_rig_node_end_to_end``); ComfyUI's own VRAM lifecycle is Gate F, inside ComfyUI.
 """
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -226,6 +228,51 @@ def test_relabel_node_rejects_non_file3d(tmp_path, monkeypatch):
     monkeypatch.setattr(nodes, "_output_dir", lambda: str(tmp_path))
     with pytest.raises(TypeError):
         nodes.SkinTokensRelabel().relabel(glb="/some/path.glb")  # bare string, not File3D
+
+
+# --- server: full node pipeline on the GPU (Phase 5 glue end to end) ---------
+
+
+@pytest.mark.server
+@pytest.mark.skipif(
+    not os.environ.get("SKINTOKENS_RUN_MODEL"),
+    reason="needs the ~14 GB model + GPU (server-side)",
+)
+def test_rig_node_end_to_end(tmp_path, monkeypatch):
+    """SkinTokensRig via a File3D input -> rigged skinned FILE_3D_GLB, on the GPU.
+
+    Exercises the Phase 5 node glue (comfy_types bridge + wrapper.prepare no-op +
+    relabel + export) around real inference, without needing ComfyUI. ComfyUI's
+    own VRAM lifecycle (Gate F) is a separate check inside ComfyUI.
+    """
+    from skintokens.comfy_model import SkinTokensModelWrapper
+    from skintokens.model_loader import load_model
+
+    glb = Path("references/SkinTokens/examples/giraffe.glb")
+    if not glb.exists():
+        pytest.skip("run references/pull.sh to fetch the sample glb")
+
+    models_dir = os.environ.get("SKINTOKENS_MODELS_DIR") or None
+    bundle = load_model(
+        device=os.environ.get("SKINTOKENS_DEVICE", "cuda"), models_dir=models_dir
+    )
+    model = SkinTokensModelWrapper(bundle, patcher=None)  # no ComfyUI -> prepare() no-op
+    monkeypatch.setattr(nodes, "_output_dir", lambda: str(tmp_path))
+
+    # comfy_api absent here -> make_file3d falls back to the output path string.
+    out = nodes.SkinTokensRig().rig(
+        model=model, mesh=_FakeFile3D(str(glb)), relabel=True, convention="Mixamo"
+    )[0]
+    out_path = out if isinstance(out, str) else out.get_source()
+
+    g = GLTF2().load_binary(out_path)
+    assert len(g.skins) == 1 and len(g.skins[0].joints) > 0
+    prim = g.meshes[0].primitives[0]
+    assert prim.attributes.JOINTS_0 is not None
+    assert prim.attributes.WEIGHTS_0 is not None
+    # relabel=True must not crash on a non-humanoid; core names appear only for
+    # humanoids, so just assert the run completed and joint nodes are named.
+    assert all(g.nodes[j].name for j in g.skins[0].joints)
 
 
 # --- VRAM wrapper (no-ComfyUI fallback + size estimator) --------------------

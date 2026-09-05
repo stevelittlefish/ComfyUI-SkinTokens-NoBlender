@@ -70,11 +70,29 @@ huggingface-cli login          # or: export HF_TOKEN=hf_xxx
 
 ## What runs today
 
-Right now the only `server` test is `test_rig_mesh_end_to_end` — a **smoke
-test**: it rigs a synthetic box mesh and asserts the model returns a skeleton
-(`parents`, `J > 0`) and per-vertex skin weights. It proves inference *runs* and
-returns a plausibly-shaped result.
+`pytest -m server` currently runs, end to end on the GPU:
 
-It is **not** full Gate B parity (comparing joints/parents/weights against
-upstream `demo.py`) — that comes later. If this smoke test throws, the traceback
-is exactly what's needed to fix the inference wiring, so capture and share it.
+- `test_rig_mesh_end_to_end` (test_infer.py) — rigs a synthetic box; asserts a
+  skeleton (`parents`, `J > 0`) + per-vertex skin weights come back. Gate B smoke.
+- `test_rig_glb_end_to_end` (test_infer.py) — rigs the real `giraffe.glb` via the
+  pure-Python importer + inference.
+- `test_rig_glb_to_file_roundtrip` (test_infer.py) — full engine pipeline: glb in
+  -> skinned glb out, re-importable, with JOINTS_0/WEIGHTS_0. Gate C server half.
+- `test_rig_node_end_to_end` (test_nodes.py) — the **Phase 5 ComfyUI node glue**:
+  `SkinTokensRig` with a File3D input -> rigged `FILE_3D_GLB`, exercising the
+  MESH/File3D bridge + relabel + export around real inference (no ComfyUI needed).
+
+The `giraffe.glb`-based tests skip if `references/SkinTokens/` isn't present — run
+`references/pull.sh` on the host first to fetch it.
+
+### What this does NOT cover
+
+- **Full Gate B parity** (comparing joints/parents/weights against upstream
+  `demo.py` on the same mesh) — smoke only, for now.
+- **Gate F (ComfyUI VRAM lifecycle)** — load-on-demand / offload / eviction with
+  no leak. That runs *inside* ComfyUI (the `ModelPatcher` path in
+  `skintokens/comfy_model.py`), which this script deliberately does not launch.
+- **Gate E (end-to-end through Kimodo)** — the real animation acceptance test.
+
+If any server test throws, the traceback is exactly what's needed — capture and
+share it.
