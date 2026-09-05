@@ -20,6 +20,11 @@ the documented import fixes below; re-vendoring should reproduce them.
 4. **Fixed** `model/skin_vae_model.py`: `from src.rig_package.info.asset` →
    `from ..rig_package.info.asset` (the only absolute intra-package import).
 
+5. **Patched** `model/tokenrig.py`: the Qwen backbone was built with a hardcoded
+   `attn_implementation="flash_attention_2"`. Now it uses `"flash_attention_2"`
+   only if `flash_attn` imports, else `"sdpa"` — so the model loads on servers
+   (and CPU dev boxes) without flash-attn. Same policy as the SDPA fallback in (3-ish).
+
 ## Known lazy references to the removed `bpy.py`
 
 These are inside function bodies and do NOT run at import time. They will be

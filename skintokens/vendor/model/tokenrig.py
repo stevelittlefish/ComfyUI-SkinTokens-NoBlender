@@ -119,7 +119,14 @@ class TokenRig(ModelSpec):
         llm_config.torch_dtype = torch.bfloat16
         llm_config.pre_norm = True
         self.llm_config = llm_config
-        self.transformer = AutoModelForCausalLM.from_config(config=llm_config, attn_implementation="flash_attention_2").to(torch.bfloat16)
+        _attn_impl = "flash_attention_2"
+        try:
+            import flash_attn  # noqa: F401
+        except Exception:
+            # No flash-attn (CPU dev box, or a server without it): use PyTorch's
+            # built-in scaled-dot-product attention instead. See UPSTREAM.md.
+            _attn_impl = "sdpa"
+        self.transformer = AutoModelForCausalLM.from_config(config=llm_config, attn_implementation=_attn_impl).to(torch.bfloat16)
         
         self.output_proj = nn.Sequential(
             nn.Linear(self.mesh_encoder.width, self.hidden_size),
