@@ -1,5 +1,11 @@
 # TODO — Build Order
 
+> ## 👉 ACTIVE (2026-09-06): animation retarget — see [HANDOFF-animation-retarget.md](HANDOFF-animation-retarget.md)
+> Labeling bug fixed. The animation "arm flapping" is a **Kimodo** A-pose/T-pose retarget bug
+> (root-caused + confirmed: T-pose meshes animate cleanly). **Next:** (1) fix Kimodo's
+> `retarget_animation` to be rest-direction aware, then (2) add an optional T-pose bake to this
+> pack. The HANDOFF doc has the full context to resume cold — read it first.
+
 Phased task list for building the SkinTokens ComfyUI node pack. Do phases in order; each
 phase ends at a runnable/verifiable checkpoint. Gates refer to `07-validation.md`.
 
